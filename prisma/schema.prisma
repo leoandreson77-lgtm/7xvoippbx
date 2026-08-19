@@ -1,0 +1,101 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Agent {
+  id           String     @id @default(uuid())
+  name         String
+  email        String     @unique
+  passwordHash String
+  role         String     @default("agent") // "agent" | "admin"
+  enabled      Boolean    @default(true)
+  status       String     @default("OFFLINE")
+  lastLoginAt  DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  extension    Extension?
+  auditLogs    AuditLog[]
+}
+
+model Extension {
+  id               String     @id @default(uuid())
+  number           String     @unique
+  sipUsername       String     @unique
+  sipPasswordHash  String // bcrypt hash for app-level validation
+  sipHa1           String // MD5(user:realm:password) for SIP digest auth
+  realm            String     @default("kradglobal.com")
+  agentId          String?    @unique
+  agent            Agent?     @relation(fields: [agentId], references: [id])
+  tfnId            String?
+  tfn              TfnNumber? @relation(fields: [tfnId], references: [id])
+  enabled          Boolean    @default(true)
+  registered       Boolean    @default(false)
+  registrationIp   String?
+  lastRegisteredAt DateTime?
+  maxLoginLocations Int       @default(1)
+  callsReceiveOn   String     @default("Extension") // "Extension" | "Mobile Forward" | "Voicemail" | "Ring Group"
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  callLogs         CallLog[]
+}
+
+model TfnNumber {
+  id          String      @id @default(uuid())
+  number      String      @unique // e.g. +18001234567 or +911234567890
+  label       String?     // e.g. "Sales Toll Free", "Support TFN", "Telnyx Main"
+  trunkId     String?
+  trunk       SipTrunk?   @relation(fields: [trunkId], references: [id])
+  extensions  Extension[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+model SipTrunk {
+  id        String      @id @default(uuid())
+  name      String      @default("Primary SIP Trunk")
+  provider  String      @default("telnyx") // "telnyx" | "twilio" | "voipms" | "bandwidth" | "generic"
+  host      String      // Gateway proxy address (e.g. sip.telnyx.com)
+  port      Int         @default(5060)
+  username  String      // Trunk auth username
+  password  String      // Trunk auth password
+  didNumber String?     // Default Business DID number
+  realm     String?     // SIP realm
+  enabled   Boolean     @default(true)
+  status    String      @default("UNCONFIGURED")
+  tfns      TfnNumber[]
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+}
+
+model CallLog {
+  id           String    @id @default(uuid())
+  extensionId  String
+  extension    Extension @relation(fields: [extensionId], references: [id])
+  tfnNumber    String?   // Assigned TFN / DID used for this call
+  direction    String    // "inbound" | "outbound"
+  callerNumber String
+  calleeNumber String
+  status       String    // "answered" | "missed" | "rejected" | "failed"
+  duration     Int       @default(0) // seconds
+  region       String?   @default("US")
+  startedAt    DateTime
+  answeredAt   DateTime?
+  endedAt      DateTime?
+  callUuid     String?   @unique // FreeSWITCH call UUID
+  createdAt    DateTime  @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  agentId   String?
+  agent     Agent?   @relation(fields: [agentId], references: [id])
+  action    String
+  details   String?
+  ip        String?
+  createdAt DateTime @default(now())
+}

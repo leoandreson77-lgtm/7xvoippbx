@@ -1,0 +1,39 @@
+<!--
+  Public Dialplan — Inbound Calls from SIP Trunk
+  
+  Routes incoming calls from the SIP provider to the correct extension.
+  
+  Copy to: /etc/freeswitch/dialplan/public.xml
+  
+  IMPORTANT: 
+  - Replace DID_NUMBER with your actual DID/business number.
+  - Adjust the destination extension (1001) as needed.
+  - For IVR, replace the bridge with an IVR application.
+-->
+<include>
+  <context name="public">
+    
+    <!-- ── Inbound DID Routing ────────────────────────── -->
+    <!-- Route all inbound calls to extension 1001 by default -->
+    <extension name="inbound-did">
+      <condition field="destination_number" expression="^(\+?91\d{10}|\d{10,15})$">
+        <action application="set" data="domain_name=kradglobal.com"/>
+        <action application="set" data="call_timeout=30"/>
+        <action application="set" data="hangup_after_bridge=true"/>
+        <action application="set" data="continue_on_fail=true"/>
+        
+        <!-- Transfer to default context for extension routing -->
+        <action application="transfer" data="1001 XML default"/>
+      </condition>
+    </extension>
+
+    <!-- ── Catch-all: Reject unmatched inbound calls ──── -->
+    <extension name="unmatched-inbound">
+      <condition field="destination_number" expression=".*">
+        <action application="log" data="WARNING: Unmatched inbound call to ${destination_number}"/>
+        <action application="hangup" data="NO_ROUTE_DESTINATION"/>
+      </condition>
+    </extension>
+
+  </context>
+</include>

@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KRAD Global — Enterprise PBX & Call Center Administration</title>
+  <meta name="description" content="KRAD Global Admin Panel — Modular Extension Management, CDR Report, Multi-Provider SIP Trunks, and Supervisor Controls.">
+  <link rel="stylesheet" href="/css/variables.css">
+  <link rel="stylesheet" href="/css/admin.css">
+</head>
+<body>
+  <div class="admin-layout">
+    
+    <!-- ── Left Sidebar Navigation ───────────────── -->
+    <aside class="admin-sidebar">
+      <div class="sidebar-header">
+        <span class="sidebar-logo">📞</span>
+        <div>
+          <div class="sidebar-title">KRAD Global</div>
+          <div class="sidebar-subtitle">PBX Management</div>
+        </div>
+      </div>
+
+      <nav class="nav-menu">
+        <div class="nav-item active" data-tab="overview">
+          <span class="nav-icon">📊</span>
+          <span>Overview</span>
+        </div>
+        <div class="nav-item" data-tab="extensions">
+          <span class="nav-icon">🔢</span>
+          <span>Extensions</span>
+          <span class="nav-badge" id="badgeExtCount">0</span>
+        </div>
+        <div class="nav-item" data-tab="cdr">
+          <span class="nav-icon">🕒</span>
+          <span>CDR Reports</span>
+        </div>
+        <div class="nav-item" data-tab="tfns">
+          <span class="nav-icon">📞</span>
+          <span>TFN & DIDs</span>
+          <span class="nav-badge" id="badgeTfnCount">0</span>
+        </div>
+        <div class="nav-item" data-tab="trunks">
+          <span class="nav-icon">🌐</span>
+          <span>SIP Trunks & Providers</span>
+          <span class="nav-badge" id="badgeTrunkCount">0</span>
+        </div>
+        <div class="nav-item" data-tab="agents">
+          <span class="nav-icon">👥</span>
+          <span>Agents & Team</span>
+          <span class="nav-badge" id="badgeAgentCount">0</span>
+        </div>
+      </nav>
+
+      <div class="sidebar-footer">
+        <a href="/dashboard" class="btn btn-ghost" style="font-size: var(--font-xs); justify-content: flex-start; gap: var(--space-2);">
+          <span>🎧</span>
+          <span>Switch to Agent Dialer</span>
+        </a>
+        <button class="btn btn-ghost" id="adminLogoutBtn" style="font-size: var(--font-xs); justify-content: flex-start; gap: var(--space-2); color: var(--danger);">
+          <span>🚪</span>
+          <span>Sign Out</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- ── Main View Area ────────────────────────── -->
+    <main class="admin-main">
+      <!-- Top Sticky Bar -->
+      <header class="admin-header">
+        <div class="header-title-group">
+          <h1 id="pageTitle">System Overview</h1>
+          <p id="pageSubtitle">Real-time health, active channels, and platform metrics</p>
+        </div>
+        <div class="header-actions">
+          <span class="badge badge-warning" style="font-size: 11px;">🔒 Protected Admin Session</span>
+        </div>
+      </header>
+
+      <div class="admin-body">
+        
+        <!-- ═══════════════════════════════════════════ -->
+        <!-- TAB 1: OVERVIEW & KPIS                     -->
+        <!-- ═══════════════════════════════════════════ -->
+        <section class="tab-view active" id="view-overview">
+          <div class="kpi-grid">
+            <div class="kpi-card">
+              <div class="kpi-icon-wrap" style="color: var(--accent-light);">👥</div>
+              <div class="kpi-label">Total Agents</div>
+              <div class="kpi-value" id="statTotalAgents">—</div>
+              <div class="kpi-trend positive" id="statOnlineAgentsWrap">
+                <span>●</span> <span id="statOnlineAgentsText">0 Active now</span>
+              </div>
+            </div>
+
+            <div class="kpi-card">
+              <div class="kpi-icon-wrap" style="color: #38bdf8;">🔢</div>
+              <div class="kpi-label">Configured Extensions</div>
+              <div class="kpi-value" id="statTotalExtensions">—</div>
+              <div class="kpi-trend neutral">Registered with FreeSWITCH</div>
+            </div>
+
+            <div class="kpi-card">
+              <div class="kpi-icon-wrap" style="color: var(--success);">⏱</div>
+              <div class="kpi-label">Total Talk Duration</div>
+              <div class="kpi-value" id="statTotalTalkTime">—</div>
+              <div class="kpi-trend positive">Cumulative call time</div>
+            </div>
+
+            <div class="kpi-card">
+              <div class="kpi-icon-wrap" style="color: var(--warning);">⚡</div>
+              <div class="kpi-label">Live Active Channels</div>
+              <div class="kpi-value" id="statActiveChannels">0</div>
+              <div class="kpi-trend positive">FreeSWITCH ESL Inbound</div>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 2fr 1fr; gap: var(--space-6);">
+            <!-- Quick Recent Calls -->
+            <div class="card" style="padding: var(--space-6);">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-4);">
+                <h3 style="font-size: var(--font-base); font-weight: 600;">Recent Call Activity</h3>
+                <button class="btn btn-ghost" style="font-size: var(--font-xs);" onclick="window.switchTab('cdr')">Open Full CDR Report →</button>
+              </div>
+              <div class="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Agent</th>
+                      <th>Direction</th>
+                      <th>Number</th>
+                      <th>Duration</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="overviewRecentTable">
+                    <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Loading recent calls...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Quick Multi-Trunks Health Card -->
+            <div class="card" style="padding: var(--space-6); display: flex; flex-direction: column; justify-content: space-between;">
+              <div>
+                <h3 style="font-size: var(--font-base); font-weight: 600; margin-bottom: var(--space-4);">Active SIP Providers</h3>
+                <div id="overviewTrunksList" style="display: flex; flex-direction: column; gap: var(--space-3); font-size: var(--font-sm);">
+                  <div style="text-align: center; color: var(--text-muted);">Loading providers...</div>
+                </div>
+              </div>
+              <button class="btn btn-ghost" style="width: 100%; margin-top: var(--space-4); font-size: var(--font-xs);" onclick="window.switchTab('trunks')">
+                Manage Multiple SIP Providers →
+              </button>
+            </div>
+          </div>
+        </section>
+
+
+        <!-- ═══════════════════════════════════════════ -->
+        <!-- TAB 2: EXTENSIONS (SEPARATE VIEW)           -->
+        <!-- ═══════════════════════════════════════════ -->
+        <section class="tab-view" id="view-extensions">
+          <div class="view-toolbar">
+            <div class="search-box">
+              <span class="search-icon">🔍</span>
+              <input type="text" id="searchExtensionsInput" placeholder="Search extension number or agent...">
+            </div>
+            <div style="display: flex; gap: var(--space-3);">
+              <button class="btn btn-primary" id="openCreateExtModalBtn">+ Create New Extension</button>
+            </div>
+          </div>
+
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Extension</th>
+                  <th>Assigned Agent</th>
+                  <th>Assigned TFN / Caller ID</th>
+                  <th>Receive Mode</th>
+                  <th>SIP Status</th>
+                  <th>Enabled</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="extensionsTable">
+                <tr><td colspan="7" style="text-align: center; color: var(--text-muted);">Loading extensions...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+
+        <!-- ═══════════════════════════════════════════ -->
+        <!-- TAB 3: CDR (CALL DETAIL RECORDS) REPORT     -->
+        <!-- ═══════════════════════════════════════════ -->
+        <section class="tab-view" id="view-cdr">
+          <!-- Flyzytrip Style Filter Bar -->
+          <div class="cdr-filter-card">
+            <div class="cdr-filter-grid">
+              <div class="cdr-input-group">
+                <label>Call Date From</label>
+                <input type="text" id="cdrDateFrom" placeholder="YYYY-MM-DD 00:00:00">
+              </div>
+
+              <div class="cdr-input-group">
+                <label>Call Date To</label>
+                <input type="text" id="cdrDateTo" placeholder="YYYY-MM-DD 23:59:59">
+              </div>
+
+              <div class="cdr-input-group">
+                <label>Response</label>
+                <select id="cdrResponse">
+                  <option value="ALL">ALL</option>
+                  <option value="ANSWERED">ANSWERED</option>
+                  <option value="MISSED">MISSED</option>
+                  <option value="BUSY">BUSY</option>
+                  <option value="NO ANSWER">NO ANSWER</option>
+                  <option value="FAILED">FAILED</option>
+                  <option value="REJECTED">REJECTED</option>
+                </select>
+              </div>
+
+              <div class="cdr-input-group">
+                <label>Timezone</label>
+                <select id="cdrTimezone">
+                  <option value="UTC">Coordinated Universal Time (UTC)</option>
+                  <option value="IST" selected>Asia/Kolkata (IST +05:30)</option>
+                  <option value="EST">America/New_York (EST -05:00)</option>
+                  <option value="PST">America/Los_Angeles (PST -08:00)</option>
+                </select>
+              </div>
+
+              <div class="cdr-input-group">
+                <label>Extension</label>
+                <select id="cdrExtension">
+                  <option value="ALL">ALL</option>
+                </select>
+              </div>
+
+              <div class="cdr-input-group">
+                <label>Source</label>
+                <input type="text" id="cdrSource" placeholder="Source number">
+              </div>
+
+              <div class="cdr-input-group">
+                <label>Destination</label>
+                <input type="text" id="cdrDestination" placeholder="Destination number">
+              </div>
+
+              <div class="cdr-input-group">
+                <label>Direction</label>
+                <select id="cdrDirection">
+                  <option value="ALL">ALL</option>
+                  <option value="INBOUND">INBOUND</option>
+                  <option value="OUTBOUND">OUTBOUND</option>
+                </select>
+              </div>
+
+              <div class="cdr-input-group">
+                <label>Results/page</label>
+                <select id="cdrLimit">
+                  <option value="10">10</option>
+                  <option value="30" selected>30</option>
+                  <option value="50">50</option>
+                  <option value="100">100</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="cdr-filter-actions">
+              <button class="btn-cdr-filter" id="cdrFilterBtn">Filter</button>
+              <button class="btn-cdr-csv" id="cdrDownloadCsvBtn">📥 Download CSV</button>
+            </div>
+          </div>
+
+          <div class="cdr-results-count" id="cdrResultsCount">Results found: 0</div>
+
+          <!-- CDR Report Table -->
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>CALL DATE</th>
+                  <th>ANSWER TIME</th>
+                  <th>END TIME</th>
+                  <th>DIRECTION</th>
+                  <th>ACTION</th>
+                  <th>RESPONSE</th>
+                  <th>SOURCE</th>
+                  <th>DESTINATION</th>
+                  <th>EXTENSION</th>
+                  <th>REGION</th>
+                  <th>DURATION (In Sec)</th>
+                </tr>
+              </thead>
+              <tbody id="cdrTableBody">
+                <tr><td colspan="11" style="text-align: center; color: var(--text-muted); padding: var(--space-8);">No CDR call records found</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+
+        <!-- ═══════════════════════════════════════════ -->
+        <!-- TAB 4: TFN & DID NUMBERS                    -->
+        <!-- ═══════════════════════════════════════════ -->
+        <section class="tab-view" id="view-tfns">
+          <div class="view-toolbar">
+            <div class="search-box">
+              <span class="search-icon">🔍</span>
+              <input type="text" id="searchTfnsInput" placeholder="Search TFN number or campaign label...">
+            </div>
+            <button class="btn btn-primary" id="openCreateTfnModalBtn">+ Add New TFN Number</button>
+          </div>
+
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Toll-Free / DID Number</th>
+                  <th>Campaign / Purpose Label</th>
+                  <th>SIP Provider / Trunk</th>
+                  <th>Assigned Extension</th>
+                  <th>Assigned Agent</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="tfnsTable">
+                <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Loading TFNs...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+
+        <!-- ═══════════════════════════════════════════ -->
+        <!-- TAB 5: MULTI-SIP TRUNK PROVIDERS            -->
+        <!-- ═══════════════════════════════════════════ -->
+        <section class="tab-view" id="view-trunks">
+          <div class="view-toolbar">
+            <div class="search-box">
+              <span class="search-icon">🔍</span>
+              <input type="text" id="searchTrunksInput" placeholder="Search SIP Provider or host IP...">
+            </div>
+            <button class="btn btn-primary" id="openCreateTrunkModalBtn">+ Add SIP Provider / Trunk</button>
+          </div>
+
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Trunk / Provider Name</th>
+                  <th>Provider Type</th>
+                  <th>Gateway Host & Port</th>
+                  <th>Username</th>
+                  <th>Default DID</th>
+                  <th>Linked TFNs</th>
+                  <th>Registration State</th>
+                  <th>Enabled</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="trunksTable">
+                <tr><td colspan="9" style="text-align: center; color: var(--text-muted);">Loading SIP Trunks...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+
+        <!-- ═══════════════════════════════════════════ -->
+        <!-- TAB 6: AGENTS & TEAM ROSTER                 -->
+        <!-- ═══════════════════════════════════════════ -->
+        <section class="tab-view" id="view-agents">
+          <div class="view-toolbar">
+            <div class="search-box">
+              <span class="search-icon">🔍</span>
+              <input type="text" id="searchAgentsInput" placeholder="Search agent by name or email...">
+            </div>
+            <button class="btn btn-primary" id="openCreateAgentModalBtn">+ Create Agent Account</button>
+          </div>
+
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Agent Name</th>
+                  <th>Email Address</th>
+                  <th>Role</th>
+                  <th>Assigned Extension</th>
+                  <th>Live Status</th>
+                  <th>Active</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="agentsTable">
+                <tr><td colspan="7" style="text-align: center; color: var(--text-muted);">Loading agents...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+      </div>
+    </main>
+
+  </div>
+
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- MODAL: SUPERVISOR & EXTENSION CONTROL (IMG 2)   -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <div class="modal-overlay" id="modalSupervisorExt">
+    <div class="supervisor-modal-box">
+      <div class="supervisor-modal-header">
+        <span id="supModalTitle">Extension Control & Supervisor</span>
+        <button class="modal-close" data-close="modalSupervisorExt" style="color: white;">✕</button>
+      </div>
+
+      <div class="supervisor-modal-body">
+        <input type="hidden" id="supExtId">
+
+        <!-- Row 1: Extension Number + Copy -->
+        <div class="sup-input-row">
+          <div class="sup-icon-prefix">👤</div>
+          <input type="text" class="sup-input-field" id="supExtNumber" readonly>
+          <button type="button" class="sup-action-btn" title="Copy Extension" id="copyExtNumBtn">📋</button>
+        </div>
+
+        <!-- Row 2: Password + Show/Hide + Action + Copy -->
+        <div class="sup-input-row">
+          <button type="button" class="sup-action-btn" style="background: transparent; color: #64748b;" id="supTogglePassBtn">👁</button>
+          <input type="password" class="sup-input-field" id="supExtPassword" placeholder="••••••••••••">
+          <button type="button" class="sup-action-btn" title="Copy Password" id="copyExtPassBtn">📋</button>
+        </div>
+
+        <!-- Row 3 & 4: Caller ID & Max Locations & Receive Mode -->
+        <div class="sup-grid-2">
+          <div class="sup-field-group">
+            <label>Caller ID:</label>
+            <select class="sup-select" id="supCallerIdSelect">
+              <optgroup label="Account Numbers" id="supAccountNumbersList">
+                <option value="">Default DID</option>
+              </optgroup>
+            </select>
+          </div>
+
+          <div class="sup-field-group">
+            <label>Max login locations</label>
+            <select class="sup-select" id="supMaxLocations">
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="999">Unlimited</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="sup-field-group">
+          <label>Calls receive on:</label>
+          <select class="sup-select" id="supCallsReceiveOn">
+            <option value="Extension">Extension</option>
+            <option value="Mobile Forward">Mobile Forward</option>
+            <option value="Voicemail">Voicemail</option>
+            <option value="Ring Group">Ring Group</option>
+          </select>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; margin-top: var(--space-2);">
+          <button type="button" class="btn btn-ghost" style="background: rgba(255,255,255,0.2); color: white;" id="saveSupSettingsBtn">
+            💾 Save Settings
+          </button>
+        </div>
+
+        <!-- Supervisor Live Actions Row (Listen, Whisper, Barge, WebRTC) -->
+        <div class="supervisor-actions-bar">
+          <button type="button" class="sup-action-circle" onclick="window.runSupervisorAction('listen')">
+            <div class="sup-circle-icon">🎧</div>
+            <span class="sup-action-label">Listen</span>
+          </button>
+
+          <button type="button" class="sup-action-circle" onclick="window.runSupervisorAction('whisper')">
+            <div class="sup-circle-icon">🗣️</div>
+            <span class="sup-action-label">Whisper</span>
+          </button>
+
+          <button type="button" class="sup-action-circle" onclick="window.runSupervisorAction('barge')">
+            <div class="sup-circle-icon">👥</div>
+            <span class="sup-action-label">Barge</span>
+          </button>
+
+          <button type="button" class="sup-action-circle" onclick="window.launchWebRTCForExt()">
+            <div class="sup-circle-icon">💻</div>
+            <span class="sup-action-label">WebRTC</span>
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- MODAL: ADD SIP TRUNK / PROVIDER                 -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <div class="modal-overlay" id="modalCreateTrunk">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">Add SIP Trunk Provider</h3>
+        <button class="modal-close" data-close="modalCreateTrunk">✕</button>
+      </div>
+      <form class="modal-form" id="formCreateTrunk" onsubmit="return false;">
+        <div class="input-group">
+          <label>Provider Type</label>
+          <select id="newTrunkProvider">
+            <option value="telnyx">Telnyx (sip.telnyx.com)</option>
+            <option value="twilio">Twilio Elastic SIP Trunk (pstn.twilio.com)</option>
+            <option value="voipms">VoIP.ms (sip.voip.ms)</option>
+            <option value="bandwidth">Bandwidth</option>
+            <option value="generic">Airtel / Tata / Generic SIP Provider</option>
+          </select>
+        </div>
+
+        <div class="input-group">
+          <label>Trunk Name / Label</label>
+          <input type="text" id="newTrunkName" placeholder="e.g. Telnyx US Trunk" required>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: var(--space-3);">
+          <div class="input-group">
+            <label>Gateway Host / Proxy</label>
+            <input type="text" id="newTrunkHost" placeholder="e.g. sip.telnyx.com" required>
+          </div>
+          <div class="input-group">
+            <label>Port</label>
+            <input type="number" id="newTrunkPort" value="5060" required>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3);">
+          <div class="input-group">
+            <label>SIP Username / Auth ID</label>
+            <input type="text" id="newTrunkUsername" placeholder="Username" required>
+          </div>
+          <div class="input-group">
+            <label>SIP Password</label>
+            <input type="password" id="newTrunkPassword" placeholder="Password" required>
+          </div>
+        </div>
+
+        <div class="input-group">
+          <label>Default DID / Caller ID</label>
+          <input type="text" id="newTrunkDid" placeholder="e.g. +18005550199">
+        </div>
+
+        <div class="alert alert-error" id="createTrunkError" style="display:none;"></div>
+
+        <div style="display: flex; justify-content: flex-end; gap: var(--space-3); margin-top: var(--space-4);">
+          <button type="button" class="btn btn-ghost" data-close="modalCreateTrunk">Cancel</button>
+          <button type="button" class="btn btn-primary" id="submitCreateTrunkBtn">Add SIP Trunk</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- MODAL: ADD TFN NUMBER                           -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <div class="modal-overlay" id="modalCreateTfn">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">Add Toll-Free / DID Number</h3>
+        <button class="modal-close" data-close="modalCreateTfn">✕</button>
+      </div>
+      <form class="modal-form" id="formCreateTfn" onsubmit="return false;">
+        <div class="input-group">
+          <label>Phone Number (E.164 Format)</label>
+          <input type="text" id="newTfnNumber" placeholder="e.g. +18005550199 or +911145678900" required>
+        </div>
+        <div class="input-group">
+          <label>Campaign / Department Label</label>
+          <input type="text" id="newTfnLabel" placeholder="e.g. Sales Toll Free, Support TFN" required>
+        </div>
+        <div class="input-group">
+          <label>Select SIP Provider / Trunk</label>
+          <select id="newTfnTrunk">
+            <option value="">— Select Provider —</option>
+          </select>
+        </div>
+
+        <div class="alert alert-error" id="createTfnError" style="display:none;"></div>
+
+        <div style="display: flex; justify-content: flex-end; gap: var(--space-3); margin-top: var(--space-4);">
+          <button type="button" class="btn btn-ghost" data-close="modalCreateTfn">Cancel</button>
+          <button type="button" class="btn btn-primary" id="submitCreateTfnBtn">Add TFN Number</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- MODAL: CREATE EXTENSION                         -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <div class="modal-overlay" id="modalCreateExt">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">Create New Extension</h3>
+        <button class="modal-close" data-close="modalCreateExt">✕</button>
+      </div>
+      <form class="modal-form" id="formCreateExt" onsubmit="return false;">
+        <div class="input-group">
+          <label>Extension Number (3-6 digits)</label>
+          <input type="text" id="newExtNumber" placeholder="e.g. 1005" maxlength="6" inputmode="numeric" required>
+        </div>
+        <div class="input-group">
+          <label>SIP Password</label>
+          <input type="password" id="newExtPassword" placeholder="Minimum 6 characters" required>
+        </div>
+        <div class="input-group">
+          <label>Assign Agent</label>
+          <select id="newExtAgent">
+            <option value="">— None (Unassigned) —</option>
+          </select>
+        </div>
+        <div class="input-group">
+          <label>Assign TFN / Outbound Caller ID</label>
+          <select id="newExtTfn">
+            <option value="">— Default Trunk DID —</option>
+          </select>
+        </div>
+
+        <div class="alert alert-error" id="createExtError" style="display:none;"></div>
+
+        <div style="display: flex; justify-content: flex-end; gap: var(--space-3); margin-top: var(--space-4);">
+          <button type="button" class="btn btn-ghost" data-close="modalCreateExt">Cancel</button>
+          <button type="button" class="btn btn-primary" id="submitCreateExtBtn">Create Extension</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- MODAL: CREATE AGENT                             -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <div class="modal-overlay" id="modalCreateAgent">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">Create Agent Account</h3>
+        <button class="modal-close" data-close="modalCreateAgent">✕</button>
+      </div>
+      <form class="modal-form" id="formCreateAgent" onsubmit="return false;">
+        <div class="input-group">
+          <label>Full Name</label>
+          <input type="text" id="newAgentName" placeholder="e.g. John Doe" required>
+        </div>
+        <div class="input-group">
+          <label>Email Address</label>
+          <input type="email" id="newAgentEmail" placeholder="agent@example.com" required>
+        </div>
+        <div class="input-group">
+          <label>Login Password</label>
+          <input type="password" id="newAgentPassword" placeholder="Minimum 6 characters" required>
+        </div>
+        <div class="input-group">
+          <label>Role</label>
+          <select id="newAgentRole">
+            <option value="agent">Agent</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+
+        <div class="alert alert-error" id="createAgentError" style="display:none;"></div>
+
+        <div style="display: flex; justify-content: flex-end; gap: var(--space-3); margin-top: var(--space-4);">
+          <button type="button" class="btn btn-ghost" data-close="modalCreateAgent">Cancel</button>
+          <button type="button" class="btn btn-primary" id="submitCreateAgentBtn">Create Account</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/js/admin.js"></script>
+</body>
+</html>

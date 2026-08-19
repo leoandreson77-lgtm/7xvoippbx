@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agent Login — KRAD Global</title>
+  <meta name="description" content="KRAD Global Agent Call Center — Login with your extension to start handling calls.">
+  <link rel="stylesheet" href="/css/variables.css">
+  <link rel="stylesheet" href="/css/login.css">
+</head>
+<body>
+  <div class="login-page">
+    <!-- Animated Background -->
+    <div class="login-bg">
+      <div class="grid-pattern"></div>
+      <div class="orb orb-1"></div>
+      <div class="orb orb-2"></div>
+      <div class="orb orb-3"></div>
+    </div>
+
+    <!-- Login Card -->
+    <div class="login-container">
+      <div class="login-card">
+        <div class="login-header">
+          <div class="login-logo">📞</div>
+          <h1>KRAD Global</h1>
+          <p>Sign in with your extension to start handling calls</p>
+        </div>
+
+        <form class="login-form" id="loginForm" autocomplete="off">
+          <!-- Extension Input -->
+          <div class="input-group">
+            <label for="extension">Extension or Email</label>
+            <div class="input-wrapper">
+              <span class="input-icon">👤</span>
+              <input
+                type="text"
+                id="extension"
+                name="extension"
+                class="input-with-icon"
+                placeholder="Extension (1001) or Email"
+                autocomplete="username"
+                required
+              >
+            </div>
+          </div>
+
+          <!-- Password Input -->
+          <div class="input-group">
+            <label for="password">Password</label>
+            <div class="input-wrapper">
+              <span class="input-icon">🔒</span>
+              <input
+                type="password"
+                id="password"
+                name="password"
+                class="input-with-icon"
+                placeholder="Enter your password"
+                minlength="6"
+                autocomplete="current-password"
+                required
+              >
+              <button type="button" class="password-toggle" id="passwordToggle" aria-label="Toggle password visibility">
+                👁
+              </button>
+            </div>
+          </div>
+
+          <!-- Error Message -->
+          <div class="login-error" id="loginError" role="alert"></div>
+
+          <!-- Login Button -->
+          <button type="submit" class="btn btn-primary login-btn" id="loginBtn">
+            <span id="loginBtnText">Sign In</span>
+            <div class="spinner" id="loginSpinner" style="display:none;"></div>
+          </button>
+        </form>
+
+        <div class="login-footer">
+          <p>KRAD Global Communication Platform</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/login.js"></script>
+</body>
+</html>

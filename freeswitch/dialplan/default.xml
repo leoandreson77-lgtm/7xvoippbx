@@ -1,0 +1,61 @@
+<!--
+  Default Dialplan — Internal Extension Context
+  
+  Handles calls between registered extensions and outbound calls via SIP trunk.
+  
+  Copy to: /etc/freeswitch/dialplan/default.xml
+  
+  IMPORTANT: Adjust the outbound pattern and trunk gateway name to match your setup.
+-->
+<include>
+  <context name="default">
+    
+    <!-- ── Internal Extension-to-Extension Calls ──────── -->
+    <extension name="local-extensions">
+      <condition field="destination_number" expression="^(1\d{3})$">
+        <action application="set" data="call_timeout=30"/>
+        <action application="set" data="hangup_after_bridge=true"/>
+        <action application="set" data="continue_on_fail=true"/>
+        <action application="bridge" data="user/$1@kradglobal.com"/>
+        <!-- If not answered, play message -->
+        <action application="answer"/>
+        <action application="playback" data="ivr/ivr-the_person_at_extension.wav"/>
+        <action application="say" data="en number itoa $1"/>
+        <action application="playback" data="ivr/ivr-is_not_available.wav"/>
+        <action application="hangup"/>
+      </condition>
+    </extension>
+
+    <!-- ── Outbound Calls via SIP Trunk ────────────────── -->
+    <!-- 
+      Pattern: 10+ digit numbers (adjust for your country).
+      Indian numbers: 10 digits, optionally prefixed with +91 or 0.
+    -->
+    <extension name="outbound-calls">
+      <condition field="destination_number" expression="^(\+?\d{10,15})$">
+        <action application="set" data="effective_caller_id_name=KRAD Global"/>
+        <action application="set" data="effective_caller_id_number=${outbound_caller_id_number}"/>
+        <action application="set" data="hangup_after_bridge=true"/>
+        <action application="set" data="call_timeout=60"/>
+        <action application="bridge" data="sofia/gateway/sip-trunk/$1"/>
+      </condition>
+    </extension>
+
+    <!-- ── Echo Test (for debugging) ──────────────────── -->
+    <extension name="echo-test">
+      <condition field="destination_number" expression="^9196$">
+        <action application="answer"/>
+        <action application="echo"/>
+      </condition>
+    </extension>
+
+    <!-- ── Hold Music ─────────────────────────────────── -->
+    <extension name="hold-music">
+      <condition field="destination_number" expression="^9664$">
+        <action application="answer"/>
+        <action application="playback" data="$${hold_music}"/>
+      </condition>
+    </extension>
+
+  </context>
+</include>

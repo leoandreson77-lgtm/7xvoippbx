@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agent Dashboard — KRAD Global</title>
+  <meta name="description" content="KRAD Global Agent Dashboard — Make and receive calls via WebRTC.">
+  <link rel="stylesheet" href="/css/variables.css">
+  <link rel="stylesheet" href="/css/dashboard.css">
+</head>
+<body>
+  <div class="dashboard" id="dashboard">
+    <!-- ── Top Bar ──────────────────────────────── -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <span class="topbar-brand">KRAD Global</span>
+        <div class="topbar-divider"></div>
+        <div class="topbar-info">
+          <span>Welcome, <strong id="agentName">Agent</strong></span>
+          <span class="topbar-extension" id="extensionDisplay">—</span>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <div class="topbar-status">
+          <span class="status-dot" id="statusDot"></span>
+          <span id="statusText">Connecting...</span>
+        </div>
+        <div class="sip-status">
+          <span>SIP:</span>
+          <span id="sipStatusText">—</span>
+        </div>
+        <a href="/admin" id="adminBtn" class="btn btn-ghost" style="display:none; font-size: var(--font-sm);">🛠 Admin</a>
+        <button class="btn btn-ghost logout-btn" id="logoutBtn">Logout</button>
+      </div>
+    </header>
+
+    <!-- ── Main Content ─────────────────────────── -->
+    <main class="dashboard-content">
+      <!-- Left Panel: Agent Info + Recent Calls -->
+      <aside class="panel-left">
+        <div class="card agent-card">
+          <div class="agent-avatar" id="agentAvatar">A</div>
+          <div class="agent-name" id="agentNameFull">Agent</div>
+          <div class="agent-role" id="agentRole">Agent</div>
+          <div class="agent-stats">
+            <div class="stat-item">
+              <div class="stat-value" id="statCalls">0</div>
+              <div class="stat-label">Today's Calls</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-value" id="statDuration">0m</div>
+              <div class="stat-label">Talk Time</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card recent-calls">
+          <div class="card-header">
+            <h3 class="card-title">Recent Calls</h3>
+          </div>
+          <div class="call-list" id="callList">
+            <div class="call-item" style="justify-content: center; color: var(--text-muted); font-size: var(--font-sm);">
+              No recent calls
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Center: Dialer -->
+      <section class="panel-center">
+        <div class="dialer-card">
+          <div class="dialer-display">
+            <div class="dialer-extension" id="dialerExtension">Extension 1001</div>
+            <div style="font-size: var(--font-xs); color: var(--accent-light); margin-bottom: var(--space-2); font-family: monospace;" id="agentTfnDisplay">TFN: Default DID</div>
+            <input
+              type="tel"
+              class="dialer-input"
+              id="dialerInput"
+              placeholder="Enter number"
+              autocomplete="off"
+            >
+          </div>
+
+          <div class="dial-pad" id="dialPad">
+            <button class="dial-key" data-digit="1">
+              <span class="digit">1</span>
+              <span class="letters">&nbsp;</span>
+            </button>
+            <button class="dial-key" data-digit="2">
+              <span class="digit">2</span>
+              <span class="letters">ABC</span>
+            </button>
+            <button class="dial-key" data-digit="3">
+              <span class="digit">3</span>
+              <span class="letters">DEF</span>
+            </button>
+            <button class="dial-key" data-digit="4">
+              <span class="digit">4</span>
+              <span class="letters">GHI</span>
+            </button>
+            <button class="dial-key" data-digit="5">
+              <span class="digit">5</span>
+              <span class="letters">JKL</span>
+            </button>
+            <button class="dial-key" data-digit="6">
+              <span class="digit">6</span>
+              <span class="letters">MNO</span>
+            </button>
+            <button class="dial-key" data-digit="7">
+              <span class="digit">7</span>
+              <span class="letters">PQRS</span>
+            </button>
+            <button class="dial-key" data-digit="8">
+              <span class="digit">8</span>
+              <span class="letters">TUV</span>
+            </button>
+            <button class="dial-key" data-digit="9">
+              <span class="digit">9</span>
+              <span class="letters">WXYZ</span>
+            </button>
+            <button class="dial-key special" data-digit="*">
+              <span class="digit">✱</span>
+              <span class="letters">&nbsp;</span>
+            </button>
+            <button class="dial-key" data-digit="0">
+              <span class="digit">0</span>
+              <span class="letters">+</span>
+            </button>
+            <button class="dial-key special" data-digit="#">
+              <span class="digit">#</span>
+              <span class="letters">&nbsp;</span>
+            </button>
+          </div>
+
+          <div class="call-actions">
+            <button class="call-btn call-btn-dial" id="callBtn" disabled>
+              📞 CALL
+            </button>
+            <button class="call-btn call-btn-hangup" id="hangupBtn">
+              📕 HANG UP
+            </button>
+            <button class="backspace-btn" id="backspaceBtn">⌫</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right Panel: Active Call + Controls -->
+      <aside class="panel-right">
+        <!-- Active Call Card -->
+        <div class="card active-call-card" id="activeCallCard">
+          <div class="active-call-badge-row">
+            <span class="badge badge-success"><span class="status-dot online"></span> HD Voice Connected</span>
+            <span class="active-call-secure-tag">🔒 Encrypted</span>
+          </div>
+
+          <div class="active-call-header">
+            <div class="active-caller-avatar" id="activeCallerAvatar">📞</div>
+            <div class="active-call-number" id="activeCallNumber">—</div>
+            <div class="active-call-status" id="activeCallStatus">In Conversation</div>
+            <div class="active-call-timer" id="activeCallTimer">00:00</div>
+
+            <!-- Audio Equalizer Waves Animation -->
+            <div class="audio-equalizer" id="audioEqualizer">
+              <span class="eq-bar"></span>
+              <span class="eq-bar"></span>
+              <span class="eq-bar"></span>
+              <span class="eq-bar"></span>
+              <span class="eq-bar"></span>
+            </div>
+          </div>
+
+          <div class="call-controls">
+            <button class="call-control-btn" id="muteBtn" data-action="mute">
+              <span class="control-icon">🎤</span>
+              <span class="control-label">Mute</span>
+            </button>
+            <button class="call-control-btn" id="holdBtn" data-action="hold">
+              <span class="control-icon">⏸</span>
+              <span class="control-label">Hold</span>
+            </button>
+            <button class="call-control-btn" id="dtmfBtn" data-action="dtmf">
+              <span class="control-icon">🔢</span>
+              <span class="control-label">Keypad</span>
+            </button>
+          </div>
+          <button class="btn btn-danger hangup-active-btn" id="hangupActiveBtn">
+            🔴 End Call
+          </button>
+        </div>
+
+        <!-- Connection Info -->
+        <div class="card" id="connectionCard">
+          <div class="card-header">
+            <h3 class="card-title">Connection State</h3>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: var(--space-3); font-size: var(--font-sm);">
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: var(--text-muted);">SIP Server</span>
+              <span id="sipServerDisplay">—</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: var(--text-muted);">WebSocket Gateway</span>
+              <span id="wsStatusDisplay">—</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: var(--text-muted);">WebRTC Signaling</span>
+              <span id="fsStatusDisplay">—</span>
+            </div>
+          </div>
+          <button class="btn btn-ghost" id="retryBtn" style="margin-top: var(--space-4); width: 100%; display: none;">
+            🔄 Retry Registration
+          </button>
+        </div>
+      </aside>
+    </main>
+
+    <!-- ── Enhanced Incoming Call Overlay ────────────────── -->
+    <div class="incoming-call-overlay" id="incomingCallOverlay">
+      <div class="incoming-call-card">
+        <!-- Pulsing Avatar Ripple -->
+        <div class="incoming-avatar-ripple-wrap">
+          <div class="incoming-ripple-ring r1"></div>
+          <div class="incoming-ripple-ring r2"></div>
+          <div class="incoming-caller-avatar-circle" id="incomingCallerAvatar">📞</div>
+        </div>
+
+        <div class="incoming-call-pill">🔔 INCOMING CALL</div>
+        <div class="incoming-caller-name" id="incomingCallerName">Caller</div>
+        <div class="incoming-call-number" id="incomingCallerNumber">+18005550199</div>
+        <div class="incoming-call-context" id="incomingCallContext">Internal Extension • HD Voice</div>
+
+        <!-- Sound Waves Bar Animation -->
+        <div class="incoming-sound-waves">
+          <span class="wave-bar"></span>
+          <span class="wave-bar"></span>
+          <span class="wave-bar"></span>
+          <span class="wave-bar"></span>
+          <span class="wave-bar"></span>
+        </div>
+
+        <div class="incoming-call-actions">
+          <button class="incoming-btn-answer" id="acceptCallBtn">
+            <span class="inc-btn-icon">📞</span>
+            <span>Answer</span>
+          </button>
+          <button class="incoming-btn-decline" id="rejectCallBtn">
+            <span class="inc-btn-icon">✕</span>
+            <span>Decline</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── DTMF Overlay ─────────────────────────── -->
+    <div class="dtmf-overlay" id="dtmfOverlay">
+      <div class="dtmf-card">
+        <div class="card-header">
+          <h3 class="card-title">Send DTMF</h3>
+        </div>
+        <div class="dial-pad" id="dtmfPad">
+          <button class="dial-key" data-dtmf="1"><span class="digit">1</span></button>
+          <button class="dial-key" data-dtmf="2"><span class="digit">2</span></button>
+          <button class="dial-key" data-dtmf="3"><span class="digit">3</span></button>
+          <button class="dial-key" data-dtmf="4"><span class="digit">4</span></button>
+          <button class="dial-key" data-dtmf="5"><span class="digit">5</span></button>
+          <button class="dial-key" data-dtmf="6"><span class="digit">6</span></button>
+          <button class="dial-key" data-dtmf="7"><span class="digit">7</span></button>
+          <button class="dial-key" data-dtmf="8"><span class="digit">8</span></button>
+          <button class="dial-key" data-dtmf="9"><span class="digit">9</span></button>
+          <button class="dial-key" data-dtmf="*"><span class="digit">✱</span></button>
+          <button class="dial-key" data-dtmf="0"><span class="digit">0</span></button>
+          <button class="dial-key" data-dtmf="#"><span class="digit">#</span></button>
+        </div>
+        <button class="btn btn-ghost dtmf-close-btn" id="dtmfCloseBtn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Remote Audio Element (hidden) -->
+  <audio id="remoteAudio" autoplay></audio>
+  <audio id="ringtone" loop preload="none">
+    <!-- Ringtone can be added here -->
+  </audio>
+
+  <!-- JsSIP from CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/jssip@3.10.1/dist/jssip.min.js"></script>
+
+  <!-- Dashboard Scripts -->
+  <script src="/js/sip-client.js"></script>
+  <script src="/js/websocket-client.js"></script>
+  <script src="/js/dialer.js"></script>
+  <script src="/js/call-controls.js"></script>
+  <script src="/js/dashboard.js"></script>
+</body>
+</html>

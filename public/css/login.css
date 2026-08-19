@@ -1,0 +1,203 @@
+/* ── Login Page Styles ── */
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--gradient-dark);
+  position: relative;
+  overflow: hidden;
+}
+
+/* ── Animated Background ── */
+.login-bg {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  z-index: 0;
+}
+
+.login-bg .orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.4;
+  animation: float 20s ease-in-out infinite;
+}
+
+.login-bg .orb-1 {
+  width: 400px;
+  height: 400px;
+  background: var(--accent);
+  top: -100px;
+  right: -100px;
+  animation-delay: 0s;
+}
+
+.login-bg .orb-2 {
+  width: 300px;
+  height: 300px;
+  background: #8b5cf6;
+  bottom: -80px;
+  left: -80px;
+  animation-delay: -7s;
+}
+
+.login-bg .orb-3 {
+  width: 200px;
+  height: 200px;
+  background: #a855f7;
+  top: 50%;
+  left: 50%;
+  animation-delay: -14s;
+}
+
+@keyframes float {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  25% { transform: translate(30px, -30px) scale(1.05); }
+  50% { transform: translate(-20px, 20px) scale(0.95); }
+  75% { transform: translate(20px, 10px) scale(1.02); }
+}
+
+/* ── Grid Pattern ── */
+.login-bg .grid-pattern {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(99, 102, 241, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(99, 102, 241, 0.03) 1px, transparent 1px);
+  background-size: 50px 50px;
+}
+
+/* ── Login Card ── */
+.login-container {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 420px;
+  padding: var(--space-6);
+}
+
+.login-card {
+  background: rgba(17, 24, 39, 0.85);
+  backdrop-filter: blur(40px);
+  -webkit-backdrop-filter: blur(40px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-2xl);
+  padding: var(--space-10);
+  box-shadow: var(--shadow-xl), 0 0 40px rgba(99, 102, 241, 0.08);
+  animation: fadeInUp 0.6s ease-out;
+}
+
+.login-header {
+  text-align: center;
+  margin-bottom: var(--space-8);
+}
+
+.login-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  background: var(--gradient-primary);
+  border-radius: var(--radius-xl);
+  margin-bottom: var(--space-5);
+  font-size: 1.5rem;
+  box-shadow: 0 8px 24px var(--accent-glow);
+}
+
+.login-header h1 {
+  font-size: var(--font-2xl);
+  font-weight: 700;
+  margin-bottom: var(--space-2);
+  background: var(--gradient-primary);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.login-header p {
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.login-form .input-group {
+  gap: var(--space-2);
+}
+
+.login-form .input-wrapper {
+  position: relative;
+}
+
+.login-form input {
+  padding: var(--space-4) var(--space-4) var(--space-4) 2.75rem;
+  font-size: var(--font-base);
+  border-radius: var(--radius-lg);
+  height: 48px;
+}
+
+.password-toggle {
+  position: absolute;
+  right: var(--space-3);
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: var(--space-1);
+  font-size: var(--font-lg);
+  transition: color var(--transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.password-toggle:hover {
+  color: var(--text-secondary);
+}
+
+.login-btn {
+  height: 48px;
+  font-size: var(--font-base);
+  font-weight: 600;
+  border-radius: var(--radius-lg);
+  margin-top: var(--space-2);
+}
+
+.login-btn .spinner {
+  width: 20px;
+  height: 20px;
+}
+
+/* ── Error Message ── */
+.login-error {
+  display: none;
+  padding: var(--space-3) var(--space-4);
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  border-radius: var(--radius-md);
+  color: #fca5a5;
+  font-size: var(--font-sm);
+  text-align: center;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.login-error.visible {
+  display: block;
+}
+
+/* ── Footer ── */
+.login-footer {
+  text-align: center;
+  margin-top: var(--space-6);
+  color: var(--text-muted);
+  font-size: var(--font-xs);
+}
