@@ -273,22 +273,27 @@
   }
 
   async function loadTfnsDropdown() {
+    const select = document.getElementById('newExtTfn');
+    if (!select) return;
+
+    let tfns = allTfns;
     try {
       const res = await fetch('/api/admin/tfns', { credentials: 'include', headers: getHeaders() });
-      if (!res.ok) return;
-      const tfns = await res.json();
-      allTfns = tfns;
-      const select = document.getElementById('newExtTfn');
-      if (!select) return;
+      if (res.ok) {
+        tfns = await res.json();
+        allTfns = tfns;
+      }
+    } catch { /* use cached allTfns */ }
 
-      select.innerHTML = '<option value="">— Default Trunk DID —</option>';
+    select.innerHTML = '<option value="">— Default Trunk DID —</option>';
+    if (tfns && tfns.length > 0) {
       tfns.forEach((t) => {
         const opt = document.createElement('option');
         opt.value = t.id;
         opt.textContent = `${t.number} (${t.label || 'TFN'})`;
         select.appendChild(opt);
       });
-    } catch { /* ignore */ }
+    }
   }
 
   document.getElementById('submitCreateExtBtn').addEventListener('click', async () => {
@@ -640,7 +645,9 @@
       if (!res.ok) throw new Error(data.error || 'Failed to add TFN');
 
       closeModal('modalCreateTfn');
-      loadTfns();
+      await loadTfns();
+      await loadTfnsDropdown();
+      await loadTrunks();
     } catch (err) {
       showError(createTfnError, err.message);
     }
@@ -654,8 +661,10 @@
         credentials: 'include',
         headers: getHeaders(),
       });
-      loadTfns();
-      loadExtensions();
+      await loadTfns();
+      await loadTfnsDropdown();
+      await loadExtensions();
+      await loadTrunks();
     } catch { /* ignore */ }
   };
 
@@ -794,7 +803,8 @@
       if (!res.ok) throw new Error(data.error || 'Failed to create SIP trunk');
 
       closeModal('modalCreateTrunk');
-      loadTrunks();
+      await loadTrunks();
+      await loadTrunksDropdown();
     } catch (err) {
       showError(createTrunkError, err.message);
     }
@@ -808,8 +818,9 @@
         credentials: 'include',
         headers: getHeaders(),
       });
-      loadTrunks();
-      loadTfns();
+      await loadTrunks();
+      await loadTrunksDropdown();
+      await loadTfns();
     } catch { /* ignore */ }
   };
 
@@ -841,21 +852,29 @@
   };
 
   async function loadTrunksDropdown() {
+    const select = document.getElementById('newTfnTrunk');
+    if (!select) return;
+
+    // Try to fetch fresh data, fallback to cached allTrunks
+    let trunks = allTrunks;
     try {
       const res = await fetch('/api/admin/trunks', { credentials: 'include', headers: getHeaders() });
-      if (!res.ok) return;
-      const trunks = await res.json();
-      const select = document.getElementById('newTfnTrunk');
-      if (!select) return;
+      if (res.ok) {
+        trunks = await res.json();
+        allTrunks = trunks; // Update cache
+      }
+    } catch { /* use cached allTrunks */ }
 
-      select.innerHTML = '<option value="">— Select Provider Trunk —</option>';
+    select.innerHTML = '<option value="">— Select Provider Trunk —</option>';
+    if (trunks && trunks.length > 0) {
       trunks.forEach((t) => {
         const opt = document.createElement('option');
         opt.value = t.id;
-        opt.textContent = `${t.name} (${t.provider.toUpperCase()} - ${t.host})`;
+        const providerLabel = (t.provider || 'SIP').toUpperCase();
+        opt.textContent = `${t.name} (${providerLabel} — ${t.host})`;
         select.appendChild(opt);
       });
-    } catch { /* ignore */ }
+    }
   }
 
   // ── Agents Management ───────────────────────────
