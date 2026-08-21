@@ -13,15 +13,11 @@ echo ===========================================================================
 echo.
 
 REM Prompt user for Docker Hub / Registry Username
-set /p DOCKER_USER="Enter your Docker Hub username (e.g. yourname): "
-if "%DOCKER_USER%"=="" (
-    echo [ERROR] Docker Hub username cannot be empty.
-    pause
-    exit /b 1
-)
+set /p DOCKER_USER="Enter your Docker Hub username [default: leoaddre]: "
+if "%DOCKER_USER%"=="" set DOCKER_USER=leoaddre
 
-set /p REPO_NAME="Enter repository name [default: krad-global-app]: "
-if "%REPO_NAME%"=="" set REPO_NAME=krad-global-app
+set /p REPO_NAME="Enter repository name [default: 7xvoip]: "
+if "%REPO_NAME%"=="" set REPO_NAME=7xvoip
 
 set /p IMAGE_TAG="Enter tag [default: latest]: "
 if "%IMAGE_TAG%"=="" set IMAGE_TAG=latest
