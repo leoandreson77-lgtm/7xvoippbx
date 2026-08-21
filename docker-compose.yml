@@ -1,0 +1,74 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: leoaddre/7xvoip:latest
+    container_name: krad-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - path: .env
+        required: false
+      - path: .env.docker
+        required: false
+    environment:
+      - PORT=3000
+      - NODE_ENV=production
+      - DATABASE_URL=file:/app/data/app.db
+      - FREESWITCH_HOST=${FREESWITCH_HOST:-freeswitch_freeswitch}
+      - FREESWITCH_PORT=${FREESWITCH_PORT:-8021}
+      - FREESWITCH_PASSWORD=${FREESWITCH_PASSWORD:-ClueCon}
+      - SEED_DATABASE=true
+    volumes:
+      - sqlite_data:/app/data
+    depends_on:
+      - freeswitch
+    networks:
+      - krad-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  freeswitch:
+    image: bettervoice/freeswitch-container:latest
+    container_name: krad-freeswitch
+    restart: unless-stopped
+    ports:
+      - "5060:5060/tcp"
+      - "5060:5060/udp"
+      - "5061:5061/tcp"
+      - "5066:5066/tcp"
+      - "7443:7443/tcp"
+      - "8021:8021/tcp"
+      - "16384-16484:16384-16484/udp"
+    volumes:
+      - ./freeswitch/docker/autoload_configs/event_socket.conf.xml:/etc/freeswitch/autoload_configs/event_socket.conf.xml:ro
+      - ./freeswitch/docker/autoload_configs/xml_curl.conf.xml:/etc/freeswitch/autoload_configs/xml_curl.conf.xml:ro
+      - ./freeswitch/dialplan/default.xml:/etc/freeswitch/dialplan/default.xml:ro
+      - ./freeswitch/dialplan/public.xml:/etc/freeswitch/dialplan/public.xml:ro
+      - ./freeswitch/sip_profiles/internal.xml:/etc/freeswitch/sip_profiles/internal.xml:ro
+      - fs_recordings:/var/lib/freeswitch/recordings
+      - fs_storage:/var/lib/freeswitch/storage
+    environment:
+      - SOUND_RATES=8000:16000
+      - SOUND_TYPES=music:en-us-callie
+    networks:
+      - krad-network
+
+volumes:
+  sqlite_data:
+    name: krad_sqlite_data
+  fs_recordings:
+    name: krad_fs_recordings
+  fs_storage:
+    name: krad_fs_storage
+
+networks:
+  krad-network:
+    name: krad-network
+    driver: bridge

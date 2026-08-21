@@ -33,12 +33,15 @@ class WsClient {
       this.ws.addEventListener('open', () => {
         this.connected = true;
         this.reconnectAttempts = 0;
+        this.startHeartbeat();
         this.emit('connected');
       });
 
       this.ws.addEventListener('message', (event) => {
         try {
           const message = JSON.parse(event.data);
+          if (message.type === 'pong') return; // Heartbeat reply
+
           this.emit('message', message);
 
           // Also emit specific event type
@@ -52,10 +55,11 @@ class WsClient {
 
       this.ws.addEventListener('close', (event) => {
         this.connected = false;
+        this.stopHeartbeat();
         this.emit('disconnected', { code: event.code, reason: event.reason });
 
-        // Don't reconnect if session was replaced or auth failed
-        if (event.code === 4001 || event.code === 4002) {
+        // Don't reconnect if session was explicitly replaced or auth failed
+        if (event.code === 4001) {
           return;
         }
 
@@ -64,11 +68,28 @@ class WsClient {
 
       this.ws.addEventListener('error', () => {
         this.connected = false;
+        this.stopHeartbeat();
         this.emit('error');
       });
     } catch (err) {
       console.error('WebSocket connection error:', err);
       this.scheduleReconnect();
+    }
+  }
+
+  startHeartbeat() {
+    this.stopHeartbeat();
+    this.heartbeatTimer = setInterval(() => {
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({ type: 'ping' }));
+      }
+    }, 10000); // 10s ping prevents proxy idle timeouts
+  }
+
+  stopHeartbeat() {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
     }
   }
 

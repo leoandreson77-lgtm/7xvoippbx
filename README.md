@@ -27,7 +27,23 @@ Browser (JsSIP)  ──WSS──>  FreeSWITCH (mod_sofia)  ──SIP──>  SIP
                     FreeSWITCH Directory
 ```
 
-## Quick Start
+## 🐳 Docker Quick Start (Recommended)
+
+Run the entire system (Node.js backend, WebRTC softphone UI, and FreeSWITCH PBX) with a single command:
+
+```bash
+docker compose up --build -d
+```
+
+- Web App & Agent Softphone: [http://localhost:3000](http://localhost:3000)
+- Admin Panel: [http://localhost:3000/admin](http://localhost:3000/admin) (`admin@kradglobal.com` / `Admin@123`)
+- Agent Login: Ext `1001` (`Agent@123`)
+
+👉 See [DOCKER.md](file:///c:/Users/DELL/Desktop/KRAD%20GLOBAL/DOCKER.md) for full Docker options, environment variables, live-reload dev mode, and production guidelines.
+
+---
+
+## 💻 Manual Setup (Bare Metal)
 
 ### Prerequisites
 

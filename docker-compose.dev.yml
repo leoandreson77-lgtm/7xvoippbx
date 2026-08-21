@@ -1,0 +1,20 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: krad-app-dev
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - DATABASE_URL=file:/app/data/app.db
+      - FREESWITCH_HOST=${FREESWITCH_HOST:-freeswitch_freeswitch}
+      - FREESWITCH_PORT=${FREESWITCH_PORT:-8021}
+      - FREESWITCH_PASSWORD=${FREESWITCH_PASSWORD:-ClueCon}
+      - SEED_DATABASE=true
+    volumes:
+      - ./src:/app/src
+      - ./public:/app/public
+      - ./prisma:/app/prisma
+      - sqlite_data:/app/data
+    command: ["npm", "run", "dev"]

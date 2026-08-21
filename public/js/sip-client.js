@@ -22,20 +22,22 @@ class SipClient {
     this.activeCallTarget = null;
     this.callUuid = null;
     this.pendingSdpOffer = null;
+    this.pendingIceCandidates = [];
 
     // Create hidden remote audio element
     this.setupAudioElement();
   }
 
   setupAudioElement() {
-    if (!document.getElementById('sipRemoteAudio')) {
-      this.remoteAudio = document.createElement('audio');
-      this.remoteAudio.id = 'sipRemoteAudio';
-      this.remoteAudio.autoplay = true;
-      document.body.appendChild(this.remoteAudio);
-    } else {
-      this.remoteAudio = document.getElementById('sipRemoteAudio');
+    let el = document.getElementById('sipRemoteAudio');
+    if (!el) {
+      el = document.createElement('audio');
+      el.id = 'sipRemoteAudio';
+      el.autoplay = true;
+      el.playsInline = true;
+      document.body.appendChild(el);
     }
+    this.remoteAudio = el;
   }
 
   /**
@@ -70,12 +72,37 @@ class SipClient {
       });
 
       this.wsClient.on('ice_candidate', async (data) => {
-        if (this.peerConnection && data.candidate) {
+        if (!data.candidate) return;
+        if (
+          this.peerConnection &&
+          this.peerConnection.remoteDescription &&
+          this.peerConnection.remoteDescription.type
+        ) {
           try {
             await this.peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-          } catch {}
+          } catch (e) {
+            console.warn('addIceCandidate error:', e);
+          }
+        } else {
+          // Queue until remote description is applied
+          this.pendingIceCandidates.push(data.candidate);
         }
       });
+    }
+  }
+
+  /**
+   * Flush queued ICE candidates after remote description is set.
+   */
+  async flushPendingIceCandidates() {
+    if (!this.peerConnection || !this.peerConnection.remoteDescription) return;
+    while (this.pendingIceCandidates.length > 0) {
+      const candidate = this.pendingIceCandidates.shift();
+      try {
+        await this.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (e) {
+        console.warn('Flushed addIceCandidate error:', e);
+      }
     }
   }
 
@@ -158,17 +185,43 @@ class SipClient {
   // ── Standalone WebRTC Peer Calling ────────────────
 
   async getLocalMedia() {
-    if (!this.localStream) {
+    if (!this.localStream || this.localStream.getTracks().every((t) => t.readyState === 'ended')) {
       try {
-        this.localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-      } catch {
-        // Audio fallback oscillator if mic permission is blocked
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const dest = ctx.createMediaStreamDestination();
-        this.localStream = dest.stream;
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+          this.localStream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+            },
+            video: false,
+          });
+        } else {
+          throw new Error('Microphone access requires HTTPS in production browsers');
+        }
+      } catch (err) {
+        console.warn('Microphone fallback:', err.message);
+        try {
+          const ctx = new (window.AudioContext || window.webkitAudioContext)();
+          const dest = ctx.createMediaStreamDestination();
+          this.localStream = dest.stream;
+        } catch {
+          this.localStream = null;
+        }
       }
     }
     return this.localStream;
+  }
+
+  getPcConfig() {
+    const stun = this.stunServer || this.config?.stunServer || 'stun:stun.l.google.com:19302';
+    return {
+      iceServers: [
+        { urls: stun },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+      ],
+    };
   }
 
   async call(target) {
@@ -181,6 +234,7 @@ class SipClient {
     this.callUuid = `call-${Date.now()}`;
     this.isMutedState = false;
     this.isOnHoldState = false;
+    this.pendingIceCandidates = [];
 
     // 1. Try SIP call if JsSIP is connected to FreeSWITCH
     if (this.mode === 'sip' && this.ua && this.ua.isRegistered()) {
@@ -205,19 +259,17 @@ class SipClient {
       this.mode = 'webrtc_relay';
       this.emit('calling', { target });
 
-      const pcConfig = {
-        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
-      };
+      const pcConfig = this.getPcConfig();
       this.peerConnection = new RTCPeerConnection(pcConfig);
 
-      const stream = await this.getLocalMedia();
-      stream.getTracks().forEach((track) => this.peerConnection.addTrack(track, stream));
-
       this.peerConnection.ontrack = (event) => {
-        if (this.remoteAudio && event.streams[0]) {
+        this.setupAudioElement();
+        if (event.streams && event.streams[0]) {
           this.remoteAudio.srcObject = event.streams[0];
-          this.remoteAudio.play().catch(() => {});
+        } else if (event.track) {
+          this.remoteAudio.srcObject = new MediaStream([event.track]);
         }
+        this.remoteAudio.play().catch(() => {});
       };
 
       this.peerConnection.onicecandidate = (event) => {
@@ -229,7 +281,15 @@ class SipClient {
         }
       };
 
-      const offer = await this.peerConnection.createOffer();
+      const stream = await this.getLocalMedia();
+      if (stream) {
+        stream.getTracks().forEach((track) => this.peerConnection.addTrack(track, stream));
+      }
+
+      const offer = await this.peerConnection.createOffer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: false,
+      });
       await this.peerConnection.setLocalDescription(offer);
 
       if (this.wsClient) {
@@ -254,6 +314,7 @@ class SipClient {
     this.activeCallTarget = data.from;
     this.callUuid = data.callUuid;
     this.pendingSdpOffer = data.sdpOffer;
+    this.pendingIceCandidates = [];
 
     this.emit('incoming', {
       callerNumber: data.from,
@@ -274,19 +335,17 @@ class SipClient {
     // WebRTC relay answer
     this.mode = 'webrtc_relay';
     try {
-      const pcConfig = {
-        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
-      };
+      const pcConfig = this.getPcConfig();
       this.peerConnection = new RTCPeerConnection(pcConfig);
 
-      const stream = await this.getLocalMedia();
-      stream.getTracks().forEach((track) => this.peerConnection.addTrack(track, stream));
-
       this.peerConnection.ontrack = (event) => {
-        if (this.remoteAudio && event.streams[0]) {
+        this.setupAudioElement();
+        if (event.streams && event.streams[0]) {
           this.remoteAudio.srcObject = event.streams[0];
-          this.remoteAudio.play().catch(() => {});
+        } else if (event.track) {
+          this.remoteAudio.srcObject = new MediaStream([event.track]);
         }
+        this.remoteAudio.play().catch(() => {});
       };
 
       this.peerConnection.onicecandidate = (event) => {
@@ -298,14 +357,25 @@ class SipClient {
         }
       };
 
-      if (this.pendingSdpOffer) {
-        await this.peerConnection.setRemoteDescription(new RTCSessionDescription({
-          type: 'offer',
-          sdp: this.pendingSdpOffer,
-        }));
+      const stream = await this.getLocalMedia();
+      if (stream) {
+        stream.getTracks().forEach((track) => this.peerConnection.addTrack(track, stream));
       }
 
-      const answer = await this.peerConnection.createAnswer();
+      if (this.pendingSdpOffer) {
+        await this.peerConnection.setRemoteDescription(
+          new RTCSessionDescription({
+            type: 'offer',
+            sdp: this.pendingSdpOffer,
+          })
+        );
+        await this.flushPendingIceCandidates();
+      }
+
+      const answer = await this.peerConnection.createAnswer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: false,
+      });
       await this.peerConnection.setLocalDescription(answer);
 
       if (this.wsClient) {
@@ -331,14 +401,19 @@ class SipClient {
   async handleWebRtcCallAccepted(data) {
     if (this.peerConnection && data.sdpAnswer) {
       try {
-        await this.peerConnection.setRemoteDescription(new RTCSessionDescription({
-          type: 'answer',
-          sdp: data.sdpAnswer,
-        }));
+        await this.peerConnection.setRemoteDescription(
+          new RTCSessionDescription({
+            type: 'answer',
+            sdp: data.sdpAnswer,
+          })
+        );
+        await this.flushPendingIceCandidates();
         this.callStartTime = Date.now();
         this.emit('accepted', { target: this.activeCallTarget });
         this.emit('confirmed', { target: this.activeCallTarget });
-      } catch {}
+      } catch (err) {
+        console.warn('handleWebRtcCallAccepted error:', err);
+      }
     }
   }
 
@@ -360,7 +435,9 @@ class SipClient {
 
   hangup() {
     if (this.mode === 'sip' && this.currentSession) {
-      try { this.currentSession.terminate(); } catch {}
+      try {
+        this.currentSession.terminate();
+      } catch {}
       this.currentSession = null;
       return;
     }
@@ -398,7 +475,9 @@ class SipClient {
 
     if (this.localStream) {
       this.isMutedState = !this.isMutedState;
-      this.localStream.getAudioTracks().forEach((t) => { t.enabled = !this.isMutedState; });
+      this.localStream.getAudioTracks().forEach((t) => {
+        t.enabled = !this.isMutedState;
+      });
       if (this.isMutedState) this.emit('muted');
       else this.emit('unmuted');
       return this.isMutedState;
@@ -421,7 +500,9 @@ class SipClient {
 
     this.isOnHoldState = !this.isOnHoldState;
     if (this.localStream) {
-      this.localStream.getAudioTracks().forEach((t) => { t.enabled = !this.isOnHoldState; });
+      this.localStream.getAudioTracks().forEach((t) => {
+        t.enabled = !this.isOnHoldState;
+      });
     }
     if (this.isOnHoldState) this.emit('held');
     else this.emit('resumed');
@@ -435,8 +516,12 @@ class SipClient {
   }
 
   cleanupPeerConnection() {
+    this.pendingIceCandidates = [];
+    this.pendingSdpOffer = null;
     if (this.peerConnection) {
-      try { this.peerConnection.close(); } catch {}
+      try {
+        this.peerConnection.close();
+      } catch {}
       this.peerConnection = null;
     }
     if (this.localStream) {
@@ -445,36 +530,35 @@ class SipClient {
       } catch {}
       this.localStream = null;
     }
+    if (this.remoteAudio) {
+      try {
+        this.remoteAudio.srcObject = null;
+      } catch {}
+    }
+    this.callStartTime = null;
     this.activeCallTarget = null;
     this.callUuid = null;
-    this.callStartTime = null;
-    this.pendingSdpOffer = null;
+    this.isMutedState = false;
+    this.isOnHoldState = false;
   }
 
-  // ── Standard SIP Session Handlers ─────────────────
-
+  // ── Session Event Handlers (JsSIP) ──────────────
   handleIncomingSession(session) {
-    if (this.currentSession) {
-      session.terminate({ status_code: 486, reason_phrase: 'Busy Here' });
-      return;
-    }
-
     this.currentSession = session;
     this.setupSessionHandlers(session);
 
-    const callerNumber = session.remote_identity?.uri?.user || 'Unknown';
-    const callerName = session.remote_identity?.display_name || '';
+    const callerNumber = session.remote_identity.uri.user;
+    const callerName = session.remote_identity.display_name || callerNumber;
 
-    this.emit('incoming', {
-      session,
-      callerNumber,
-      callerName,
-    });
+    this.emit('incoming', { callerNumber, callerName, session });
   }
 
   setupSessionHandlers(session) {
     session.on('progress', (e) => this.emit('progress', e));
-    session.on('accepted', (e) => this.emit('accepted', e));
+    session.on('accepted', (e) => {
+      this.setupRemoteAudio(session);
+      this.emit('accepted', e);
+    });
     session.on('confirmed', (e) => {
       this.setupRemoteAudio(session);
       this.emit('confirmed', e);
@@ -497,20 +581,13 @@ class SipClient {
     const pc = session.connection;
     if (pc) {
       pc.ontrack = (event) => {
+        this.setupAudioElement();
         if (this.remoteAudio && event.streams[0]) {
           this.remoteAudio.srcObject = event.streams[0];
           this.remoteAudio.play().catch(() => {});
         }
       };
     }
-  }
-
-  getPcConfig() {
-    const iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
-    if (this.config?.stunServer) {
-      iceServers.unshift({ urls: this.config.stunServer });
-    }
-    return { iceServers };
   }
 
   isRegistered() {
@@ -542,7 +619,13 @@ class SipClient {
   emit(event, data) {
     const cbs = this.listeners[event] || [];
     cbs.forEach((cb) => {
-      try { cb(data); } catch (err) { console.error(`Error in event listener for ${event}:`, err); }
+      try {
+        cb(data);
+      } catch (err) {
+        console.error(`Error in event listener for ${event}:`, err);
+      }
     });
   }
 }
+
+window.SipClient = SipClient;

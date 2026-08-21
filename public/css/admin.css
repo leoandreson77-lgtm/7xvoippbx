@@ -425,18 +425,41 @@
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-xl);
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
   box-shadow: var(--shadow-sm);
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Custom scrollbar for table containers */
+.table-container::-webkit-scrollbar {
+  height: 6px;
+}
+
+.table-container::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 0 0 var(--radius-xl) var(--radius-xl);
+}
+
+.table-container::-webkit-scrollbar-thumb {
+  background: rgba(99, 102, 241, 0.3);
+  border-radius: var(--radius-full);
+}
+
+.table-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(99, 102, 241, 0.5);
 }
 
 table {
   width: 100%;
+  min-width: 900px;
   border-collapse: collapse;
+  table-layout: auto;
 }
 
 th {
   background: rgba(255, 255, 255, 0.02);
-  padding: var(--space-4) var(--space-5);
+  padding: var(--space-3) var(--space-4);
   text-align: left;
   font-size: var(--font-xs);
   font-weight: 600;
@@ -444,10 +467,11 @@ th {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   border-bottom: 1px solid var(--border-subtle);
+  white-space: nowrap;
 }
 
 td {
-  padding: var(--space-4) var(--space-5);
+  padding: var(--space-3) var(--space-4);
   font-size: var(--font-sm);
   color: var(--text-primary);
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);

@@ -1,18 +1,41 @@
 /**
  * Dashboard Orchestrator
  * Wires together all dashboard components: SIP, WebSocket, Dialer, Call Controls.
+ * Supports cross-tab session restoration from localStorage or active cookie session.
  */
-(function () {
+(async function () {
   'use strict';
 
-  // ── Auth Check ──────────────────────────────────
-  const authToken = sessionStorage.getItem('authToken');
-  const agentData = JSON.parse(sessionStorage.getItem('agent') || 'null');
-  const extensionData = JSON.parse(sessionStorage.getItem('extension') || 'null');
+  // ── Auth Check & Session Restoration ────────────
+  let authToken = localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
+  let agentData = JSON.parse(localStorage.getItem('agent') || sessionStorage.getItem('agent') || 'null');
+  let extensionData = JSON.parse(localStorage.getItem('extension') || sessionStorage.getItem('extension') || 'null');
 
   if (!authToken || !agentData) {
-    window.location.href = '/';
-    return;
+    try {
+      const res = await fetch('/api/auth/session', { credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.agent) {
+          agentData = data.agent;
+          extensionData = data.extension || { number: data.agent.extension };
+          authToken = authToken || 'cookie-session';
+          localStorage.setItem('agent', JSON.stringify(agentData));
+          if (extensionData) localStorage.setItem('extension', JSON.stringify(extensionData));
+          sessionStorage.setItem('agent', JSON.stringify(agentData));
+          if (extensionData) sessionStorage.setItem('extension', JSON.stringify(extensionData));
+        } else {
+          window.location.href = '/';
+          return;
+        }
+      } else {
+        window.location.href = '/';
+        return;
+      }
+    } catch {
+      window.location.href = '/';
+      return;
+    }
   }
 
   // ── DOM References ──────────────────────────────
@@ -36,20 +59,24 @@
   const hangupBtn = document.getElementById('hangupBtn');
 
   // ── Initialize UI with agent data ───────────────
-  agentNameEl.textContent = agentData.name.split(' ')[0];
-  agentNameFullEl.textContent = agentData.name;
-  agentAvatarEl.textContent = agentData.name.charAt(0).toUpperCase();
-  agentRoleEl.textContent = agentData.role;
-  extensionDisplayEl.textContent = extensionData?.number || '—';
-  dialerExtensionEl.textContent = `Extension ${extensionData?.number || '—'}`;
+  agentNameEl.textContent = agentData.name ? agentData.name.split(' ')[0] : 'Agent';
+  agentNameFullEl.textContent = agentData.name || 'Agent';
+  agentAvatarEl.textContent = agentData.name ? agentData.name.charAt(0).toUpperCase() : 'A';
+  agentRoleEl.textContent = agentData.role || 'agent';
+  extensionDisplayEl.textContent = extensionData?.number || agentData?.extension || '—';
+  dialerExtensionEl.textContent = `Extension ${extensionData?.number || agentData?.extension || '—'}`;
 
   const agentTfnDisplayEl = document.getElementById('agentTfnDisplay');
 
   // Fetch full profile to get assigned TFN info
   (async function loadProfile() {
     try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (authToken && authToken !== 'cookie-session') {
+        headers['Authorization'] = `Bearer ${authToken}`;
+      }
       const res = await fetch('/api/agent/profile', {
-        headers: { 'Authorization': `Bearer ${authToken}` },
+        headers,
         credentials: 'include',
       });
       if (res.ok) {
@@ -247,16 +274,21 @@
 
     // 3. Call logout API
     try {
+      const headers = {};
+      if (authToken && authToken !== 'cookie-session') {
+        headers['Authorization'] = `Bearer ${authToken}`;
+      }
       await fetch('/api/auth/logout', {
         method: 'POST',
         credentials: 'include',
-        headers: { 'Authorization': `Bearer ${authToken}` },
+        headers,
       });
     } catch {
       // Best effort
     }
 
-    // 4. Clear session
+    // 4. Clear sessions across storage
+    localStorage.clear();
     sessionStorage.clear();
 
     // 5. Redirect
@@ -303,13 +335,16 @@
 
   async function updateAgentStatus(status) {
     try {
+      const headers = {
+        'Content-Type': 'application/json',
+      };
+      if (authToken && authToken !== 'cookie-session') {
+        headers['Authorization'] = `Bearer ${authToken}`;
+      }
       await fetch('/api/agent/status', {
         method: 'PUT',
         credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`,
-        },
+        headers,
         body: JSON.stringify({ status }),
       });
     } catch {
@@ -320,9 +355,13 @@
   // ── Load Recent Calls ───────────────────────────
   async function loadRecentCalls() {
     try {
+      const headers = {};
+      if (authToken && authToken !== 'cookie-session') {
+        headers['Authorization'] = `Bearer ${authToken}`;
+      }
       const response = await fetch('/api/agent/calls?limit=15', {
         credentials: 'include',
-        headers: { 'Authorization': `Bearer ${authToken}` },
+        headers,
       });
 
       if (!response.ok) return;
@@ -374,14 +413,18 @@
     sipStatusTextEl.style.color = 'var(--text-muted)';
 
     try {
+      const headers = {};
+      if (authToken && authToken !== 'cookie-session') {
+        headers['Authorization'] = `Bearer ${authToken}`;
+      }
       const response = await fetch('/api/auth/sip-credentials', {
         credentials: 'include',
-        headers: { 'Authorization': `Bearer ${authToken}` },
+        headers,
       });
 
       if (!response.ok) {
         if (response.status === 401) {
-          // Token expired
+          localStorage.clear();
           sessionStorage.clear();
           window.location.href = '/';
           return;

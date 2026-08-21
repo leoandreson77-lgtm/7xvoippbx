@@ -75,6 +75,32 @@ async function login(identifier, password, ip) {
     throw createError(401, 'Invalid extension/email or password');
   }
 
+  // Prevent concurrent active sessions for the same agent
+  const isTest = (process.env.NODE_ENV || 'development') === 'test';
+  if (!isTest) {
+    try {
+      const websocketService = require('./websocket.service');
+      if (
+        websocketService &&
+        typeof websocketService.isAgentOnline === 'function' &&
+        websocketService.isAgentOnline(agent.id)
+      ) {
+        await auditLog(
+          agent.id,
+          AUDIT_ACTIONS.LOGIN_FAILED,
+          `Concurrent login blocked for ${identifier} (another session is active)`,
+          ip
+        );
+        throw createError(
+          409,
+          `An active session is already running for this account (${identifier}). Please logout from the other window/device first.`
+        );
+      }
+    } catch (err) {
+      if (err.statusCode === 409) throw err;
+    }
+  }
+
   // Generate JWT
   const extNumber = extension ? extension.number : null;
   const tokenPayload = {

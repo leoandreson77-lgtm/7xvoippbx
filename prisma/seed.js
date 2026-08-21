@@ -62,16 +62,16 @@ async function main() {
     },
     {
       id: 'twilio-elastic',
-      name: 'Twilio Elastic SIP Trunk',
+      name: 'Twilio 7xvoip Elastic SIP Trunk',
       provider: 'twilio',
-      host: 'kradglobal.pstn.twilio.com',
+      host: '7xvoip.pstn.twilio.com',
       port: 5060,
-      username: 'twilio_sip_user',
-      password: 'twilio_sip_pass',
-      didNumber: '+18005550200',
-      realm: 'kradglobal.pstn.twilio.com',
+      username: '7xvoip',
+      password: '7Xvoip@22001!',
+      didNumber: '+18885752806',
+      realm: '7xvoip.pstn.twilio.com',
       enabled: true,
-      status: 'UNCONFIGURED',
+      status: 'CONFIGURED',
     },
     {
       id: 'airtel-india-sip',
@@ -92,7 +92,18 @@ async function main() {
   for (const tr of trunks) {
     const created = await prisma.sipTrunk.upsert({
       where: { id: tr.id },
-      update: {},
+      update: {
+        name: tr.name,
+        provider: tr.provider,
+        host: tr.host,
+        port: tr.port,
+        username: tr.username,
+        password: tr.password,
+        didNumber: tr.didNumber,
+        realm: tr.realm,
+        enabled: tr.enabled,
+        status: tr.status,
+      },
       create: tr,
     });
     createdTrunks.push(created);
@@ -102,7 +113,7 @@ async function main() {
   // ── Default TFN / DID Numbers Linked to Providers
   const tfns = [
     { number: '+18005550199', label: 'Sales Toll-Free (+1800)', trunkId: 'telnyx-primary' },
-    { number: '+18005550200', label: 'Support Toll-Free (+1800)', trunkId: 'twilio-elastic' },
+    { number: '+18885752806', label: 'Twilio Toll-Free (+1888)', trunkId: 'twilio-elastic' },
     { number: '+911145678900', label: 'India Support DID', trunkId: 'airtel-india-sip' },
   ];
 
@@ -110,7 +121,10 @@ async function main() {
   for (const t of tfns) {
     const created = await prisma.tfnNumber.upsert({
       where: { number: t.number },
-      update: {},
+      update: {
+        label: t.label,
+        trunkId: t.trunkId,
+      },
       create: {
         number: t.number,
         label: t.label,

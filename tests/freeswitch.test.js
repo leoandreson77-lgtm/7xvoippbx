@@ -1,6 +1,22 @@
 const request = require('supertest');
 const app = require('../src/server');
 
+describe('System Health Check', () => {
+  it('should return 200 OK on GET /api/health', async () => {
+    const res = await request(app).get('/api/health');
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('ok');
+    expect(typeof res.body.uptime).toBe('number');
+    expect(res.body).toHaveProperty('timestamp');
+  });
+
+  it('should return 200 OK on GET /health', async () => {
+    const res = await request(app).get('/health');
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('ok');
+  });
+});
+
 describe('FreeSWITCH mod_xml_curl', () => {
   describe('POST /fs-config', () => {
     it('should return not-found XML for non-directory sections', async () => {
@@ -66,5 +82,21 @@ describe('FreeSWITCH Service (unit)', () => {
   it('should reject API calls when not connected', async () => {
     const fs = require('../src/services/freeswitch.service');
     await expect(fs.hangupCall('fake-uuid')).rejects.toThrow('ESL not connected');
+  });
+});
+
+describe('FreeSWITCH Configuration & Validation', () => {
+  it('should expose freeswitch config and esl alias', () => {
+    const config = require('../src/config');
+    expect(config).toHaveProperty('freeswitch');
+    expect(config).toHaveProperty('esl');
+    expect(config.freeswitch).toBe(config.esl);
+    expect(config.freeswitch).toHaveProperty('port');
+    expect(config.freeswitch).toHaveProperty('password');
+  });
+
+  it('should export validateConfig function', () => {
+    const config = require('../src/config');
+    expect(typeof config.validateConfig).toBe('function');
   });
 });

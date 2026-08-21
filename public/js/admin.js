@@ -6,7 +6,7 @@
   'use strict';
 
   function getHeaders() {
-    const token = sessionStorage.getItem('authToken');
+    const token = localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
     const h = { 'Content-Type': 'application/json' };
     if (token && token !== 'null') {
       h['Authorization'] = `Bearer ${token}`;
@@ -162,6 +162,7 @@
     try {
       await fetch('/api/auth/logout', { method: 'POST', credentials: 'include', headers: getHeaders() });
     } catch { /* ignore */ }
+    localStorage.clear();
     sessionStorage.clear();
     window.location.href = '/';
   });
@@ -1002,10 +1003,11 @@
   // ── Initialization & Session Check ──────────────
   async function init() {
     let agentData = JSON.parse(sessionStorage.getItem('agent') || 'null');
+    const token = sessionStorage.getItem('authToken');
 
-    if (!agentData) {
+    if (!agentData || !token) {
       try {
-        const res = await fetch('/api/auth/session', { credentials: 'include' });
+        const res = await fetch('/api/auth/session', { headers: getHeaders(), credentials: 'include' });
         if (res.ok) {
           const data = await res.json();
           if (data.agent) {
@@ -1016,8 +1018,13 @@
       } catch { /* ignore */ }
     }
 
-    if (!agentData || agentData.role !== 'admin') {
+    if (!agentData) {
       window.location.href = '/';
+      return;
+    }
+
+    if (agentData.role !== 'admin') {
+      window.location.href = '/dashboard';
       return;
     }
 

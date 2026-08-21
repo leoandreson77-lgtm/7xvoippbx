@@ -125,6 +125,19 @@ async function handleMessage(ws, rawData) {
     log.debug(`WS message from agent ${ws.agentId} (ext: ${ws.extensionNumber}):`, type);
 
     switch (type) {
+      case 'ping': {
+        ws.isAlive = true;
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'pong' }));
+        }
+        break;
+      }
+
+      case 'pong': {
+        ws.isAlive = true;
+        break;
+      }
+
       case 'call_initiate': {
         const { to, callerNumber, callerName, sdpOffer, callUuid } = data;
         const targetAgentId = extensionToAgent.get(to);
@@ -342,10 +355,19 @@ function getConnectedCount() {
   return clients.size;
 }
 
+/**
+ * Check if an agent currently has an active, connected WebSocket session.
+ */
+function isAgentOnline(agentId) {
+  const client = clients.get(agentId);
+  return !!(client && client.ws && client.ws.readyState === WebSocket.OPEN);
+}
+
 module.exports = {
   initialize,
   sendToAgent,
   sendToExtension,
   broadcast,
   getConnectedCount,
+  isAgentOnline,
 };

@@ -28,12 +28,14 @@ router.post('/login', loginLimiter, async (req, res, next) => {
     const ip = req.ip || req.connection?.remoteAddress || '';
     const result = await authService.login(extension, password, ip);
 
+    const isHttps = req.secure || req.headers['x-forwarded-proto'] === 'https';
+
     // Set JWT as HttpOnly cookie
     res.cookie('token', result.token, {
       httpOnly: true,
-      secure: !config.isDev,
-      sameSite: 'strict',
-      maxAge: 15 * 60 * 1000, // 15 minutes
+      secure: isHttps,
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
 
     res.json({
@@ -71,6 +73,7 @@ router.get('/session', authenticate, (req, res) => {
   res.json({
     authenticated: true,
     agent: req.agent,
+    extension: req.agent.extension ? { number: req.agent.extension } : null,
   });
 });
 

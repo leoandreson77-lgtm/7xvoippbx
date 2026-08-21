@@ -12,23 +12,44 @@ const log = createLogger('auth-middleware');
  */
 async function authenticate(req, res, next) {
   try {
-    // Extract token from cookie first, then Authorization header
-    let token = req.cookies?.token;
-    if (!token) {
-      const authHeader = req.headers.authorization;
-      if (authHeader?.startsWith('Bearer ')) {
-        const candidate = authHeader.slice(7).trim();
-        if (candidate && candidate !== 'null' && candidate !== 'undefined') {
-          token = candidate;
-        }
+    const tokensToTry = [];
+
+    // 1. Check Authorization header first (most accurate for SPAs)
+    const authHeader = req.headers.authorization;
+    if (authHeader?.startsWith('Bearer ')) {
+      const candidate = authHeader.slice(7).trim();
+      if (candidate && candidate !== 'null' && candidate !== 'undefined') {
+        tokensToTry.push(candidate);
       }
     }
 
-    if (!token) {
+    // 2. Add Cookie token as fallback
+    if (req.cookies?.token && !tokensToTry.includes(req.cookies.token)) {
+      tokensToTry.push(req.cookies.token);
+    }
+
+    if (tokensToTry.length === 0) {
       return res.status(401).json({ error: 'Authentication required' });
     }
 
-    const decoded = jwt.verify(token, config.jwt.secret);
+    let decoded = null;
+    let lastError = null;
+
+    for (const token of tokensToTry) {
+      try {
+        decoded = jwt.verify(token, config.jwt.secret);
+        if (decoded) break;
+      } catch (err) {
+        lastError = err;
+      }
+    }
+
+    if (!decoded) {
+      if (lastError?.name === 'TokenExpiredError') {
+        return res.status(401).json({ error: 'Session expired, please login again' });
+      }
+      return res.status(401).json({ error: 'Invalid session' });
+    }
 
     // Verify agent still exists and is enabled
     const agent = await prisma.agent.findUnique({

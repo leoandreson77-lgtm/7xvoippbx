@@ -6,12 +6,19 @@ const log = createLogger('freeswitch-service');
 let eslConnection = null;
 let reconnectTimer = null;
 let isConnecting = false;
+let reconnectInterval = 5000;
+const MAX_RECONNECT_INTERVAL = 30000;
 
 /**
  * Connect to FreeSWITCH via Event Socket Layer (ESL).
  * Auto-reconnects on disconnect.
  */
 function connect(onEvent) {
+  if (!config.freeswitch.host) {
+    log.error('Cannot connect to FreeSWITCH ESL: FREESWITCH_HOST environment variable is missing.');
+    return;
+  }
+
   if (isConnecting) return;
   isConnecting = true;
 
@@ -20,13 +27,14 @@ function connect(onEvent) {
     const esl = require('modesl');
 
     const conn = new esl.Connection(
-      config.esl.host,
-      config.esl.port,
-      config.esl.password,
+      config.freeswitch.host,
+      config.freeswitch.port,
+      config.freeswitch.password,
       () => {
         isConnecting = false;
         eslConnection = conn;
-        log.info(`Connected to FreeSWITCH ESL at ${config.esl.host}:${config.esl.port}`);
+        reconnectInterval = 5000; // Reset backoff on success
+        log.info(`✓ Connected to FreeSWITCH ESL at ${config.freeswitch.host}:${config.freeswitch.port}`);
 
         // Subscribe to events
         conn.subscribe([
@@ -57,7 +65,11 @@ function connect(onEvent) {
 
     conn.on('error', (err) => {
       isConnecting = false;
-      log.error('ESL connection error', err.message);
+      if (err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND') {
+        log.warn(`FreeSWITCH ESL is unreachable at ${config.freeswitch.host}:${config.freeswitch.port} (${err.message}). Retrying in ${Math.round(reconnectInterval / 1000)}s...`);
+      } else {
+        log.error('ESL connection error', err.message);
+      }
       scheduleReconnect(onEvent);
     });
 
@@ -75,12 +87,16 @@ function connect(onEvent) {
 }
 
 function scheduleReconnect(onEvent) {
+  if (!config.freeswitch.host) return;
   if (reconnectTimer) return;
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
-    log.info('Attempting ESL reconnect...');
+    log.info(`Attempting ESL reconnect to ${config.freeswitch.host}:${config.freeswitch.port}...`);
     connect(onEvent);
-  }, 5000);
+  }, reconnectInterval);
+
+  // Exponential backoff up to 30s to prevent log spam
+  reconnectInterval = Math.min(Math.round(reconnectInterval * 1.5), MAX_RECONNECT_INTERVAL);
 }
 
 /**

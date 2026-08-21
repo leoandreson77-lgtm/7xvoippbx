@@ -61,7 +61,10 @@
         throw new Error(data.error || 'Login failed');
       }
 
-      // Store token for WebSocket authentication
+      // Store token across tabs and session
+      localStorage.setItem('authToken', data.token);
+      localStorage.setItem('agent', JSON.stringify(data.agent));
+      localStorage.setItem('extension', JSON.stringify(data.extension));
       sessionStorage.setItem('authToken', data.token);
       sessionStorage.setItem('agent', JSON.stringify(data.agent));
       sessionStorage.setItem('extension', JSON.stringify(data.extension));
@@ -100,20 +103,35 @@
 
   // ── Check for existing session ──────────────────
   (async function checkSession() {
+    const token = localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
+    if (!token) return; // Stay on login page if not logged in
+
     try {
       const response = await fetch('/api/auth/session', {
+        headers: { 'Authorization': `Bearer ${token}` },
         credentials: 'include',
       });
       if (response.ok) {
         const data = await response.json();
-        if (data.agent && data.agent.role === 'admin') {
-          window.location.href = '/admin';
-        } else {
-          window.location.href = '/dashboard';
+        if (data.agent) {
+          localStorage.setItem('agent', JSON.stringify(data.agent));
+          if (data.extension) localStorage.setItem('extension', JSON.stringify(data.extension));
+          sessionStorage.setItem('authToken', token);
+          sessionStorage.setItem('agent', JSON.stringify(data.agent));
+          if (data.extension) sessionStorage.setItem('extension', JSON.stringify(data.extension));
+
+          if (data.agent.role === 'admin') {
+            window.location.href = '/admin';
+          } else {
+            window.location.href = '/dashboard';
+          }
         }
+      } else {
+        localStorage.clear();
+        sessionStorage.clear();
       }
     } catch {
-      // Not logged in, stay on login page
+      // Stay on login page
     }
   })();
 })();

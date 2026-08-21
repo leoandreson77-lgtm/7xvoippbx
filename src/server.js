@@ -24,6 +24,9 @@ const freeswitchRoutes = require('./routes/freeswitch.routes');
 const log = createLogger('server');
 const app = express();
 
+// ── Trust Proxy (Required for EasyPanel / Docker Reverse Proxies) ──
+app.set('trust proxy', 1);
+
 // ── Security ──────────────────────────────────────
 app.use(helmet({
   contentSecurityPolicy: {
@@ -32,15 +35,15 @@ app.use(helmet({
       scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
-      connectSrc: ["'self'", "wss:", "ws:"],
-      mediaSrc: ["'self'", "blob:"],
+      connectSrc: ["'self'", "wss:", "ws:", "https:", "http:"],
+      mediaSrc: ["'self'", "blob:", "mediastream:"],
       imgSrc: ["'self'", "data:", "blob:"],
     },
   },
 }));
 
 app.use(cors({
-  origin: config.isDev ? true : false,
+  origin: true,
   credentials: true,
 }));
 
@@ -53,6 +56,18 @@ app.use('/api', apiLimiter);
 
 // ── Static Files ──────────────────────────────────
 app.use(express.static(path.join(__dirname, '..', 'public')));
+
+// ── Health Check ──────────────────────────────────
+app.get(['/health', '/api/health'], (req, res) => {
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    nodeEnv: config.nodeEnv,
+    eslTarget: `${config.freeswitch.host || 'not configured'}:${config.freeswitch.port}`,
+    eslConnected: freeswitchService.isConnected ? freeswitchService.isConnected() : false,
+  });
+});
 
 // ── API Routes ────────────────────────────────────
 app.use('/api/auth', authRoutes);
@@ -87,6 +102,9 @@ eventService.setWebsocketService(websocketService);
 
 // Only start listening and ESL when run directly (not when imported by tests)
 if (require.main === module) {
+  // Validate runtime environment variables (e.g. FREESWITCH_HOST)
+  config.validateConfig();
+
   // Connect to FreeSWITCH ESL
   freeswitchService.connect(eventService.handleFreeSwitchEvent);
 
@@ -94,7 +112,7 @@ if (require.main === module) {
     log.info(`🚀 KRAD Global Agent System running on http://localhost:${config.port}`);
     log.info(`   Environment: ${config.nodeEnv}`);
     log.info(`   SIP Domain:  ${config.sip.domain}`);
-    log.info(`   ESL Target:  ${config.esl.host}:${config.esl.port}`);
+    log.info(`   ESL Target:  ${config.freeswitch.host}:${config.freeswitch.port}`);
   });
 
   // Graceful shutdown
