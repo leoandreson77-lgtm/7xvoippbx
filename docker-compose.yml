@@ -16,14 +16,13 @@ services:
     environment:
       - PORT=3000
       - NODE_ENV=production
-      - DATABASE_URL=file:/app/data/app.db
+      - DATABASE_URL=postgres://postgres:7xvoip%4022001@31.97.41.165:5432/7xvoip?sslmode=disable
       - FREESWITCH_HOST=${FREESWITCH_HOST:-freeswitch_freeswitch}
       - FREESWITCH_PORT=${FREESWITCH_PORT:-8021}
       - FREESWITCH_PASSWORD=${FREESWITCH_PASSWORD:-ClueCon}
       - SEED_DATABASE=true
-    volumes:
-      - sqlite_data:/app/data
     depends_on:
+      - postgres
       - freeswitch
     networks:
       - krad-network
@@ -32,7 +31,22 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 15s
+      start_period: 25s
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: krad-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=7xvoip
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - krad-network
 
   freeswitch:
     image: bettervoice/freeswitch-container:latest
@@ -61,8 +75,8 @@ services:
       - krad-network
 
 volumes:
-  sqlite_data:
-    name: krad_sqlite_data
+  postgres_data:
+    name: krad_postgres_data
   fs_recordings:
     name: krad_fs_recordings
   fs_storage:

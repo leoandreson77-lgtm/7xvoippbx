@@ -2,6 +2,8 @@ const WebSocket = require('ws');
 const { PrismaClient } = require('@prisma/client');
 const { createLogger } = require('../utils/logger');
 const authService = require('./auth.service');
+const freeswitchService = require('./freeswitch.service');
+const config = require('../config');
 const { AGENT_STATUS } = require('../constants');
 
 const prisma = new PrismaClient();
@@ -140,40 +142,205 @@ async function handleMessage(ws, rawData) {
 
       case 'call_initiate': {
         const { to, callerNumber, callerName, sdpOffer, callUuid } = data;
-        const targetAgentId = extensionToAgent.get(to);
+        const generatedUuid = callUuid || `call-${Date.now()}`;
+        const cleanTo = (to || '').trim();
 
-        if (!targetAgentId || !clients.has(targetAgentId)) {
-          sendToAgent(ws.agentId, {
-            type: 'call_failed',
-            data: { cause: `Extension ${to} is currently offline` },
-          });
-          return;
-        }
+        const digitsOnly = cleanTo.replace(/\D/g, '');
+        const last10 = digitsOnly.slice(-10);
 
-        // Forward incoming call to target agent
-        sendToAgent(targetAgentId, {
-          type: 'incoming_call',
-          data: {
-            from: callerNumber || ws.extensionNumber,
-            callerName: callerName || `Agent Ext ${ws.extensionNumber}`,
-            sdpOffer,
-            callUuid: callUuid || `call-${Date.now()}`,
-          },
-        });
-
-        // Notify caller that remote is ringing
-        sendToAgent(ws.agentId, {
-          type: 'call_progress',
-          data: { to, status: 'Ringing' },
-        });
-
-        // Update statuses to RINGING
+        // Check if destination matches a TFN Number in DB or TFN prefix
+        let tfnRecord = null;
         try {
-          await prisma.agent.updateMany({
-            where: { id: { in: [ws.agentId, targetAgentId] } },
-            data: { status: AGENT_STATUS.RINGING },
+          tfnRecord = await prisma.tfnNumber.findFirst({
+            where: {
+              OR: [
+                { number: cleanTo },
+                { number: `+${digitsOnly}` },
+                { number: digitsOnly },
+                ...(last10.length >= 7 ? [{ number: { contains: last10 } }] : []),
+              ],
+            },
+            include: {
+              extensions: { include: { agent: true } },
+              trunk: true,
+            },
           });
         } catch {}
+
+        // Check if explicitly flagged as an Inbound TFN call (from webhook/trunk) or internal IVR test
+        const isTfnCall = data.isTfn === true;
+
+        if (isTfnCall) {
+          // ── STRICT TFN ISOLATION & IVR ROUTING ──
+          let alignedExtNumbers = null;
+
+          if (tfnRecord && tfnRecord.extensions && tfnRecord.extensions.length > 0) {
+            // Extract ONLY the extensions explicitly mapped to THIS specific TFN
+            alignedExtNumbers = tfnRecord.extensions.map(e => e.number);
+          } else if (!tfnRecord && isGenericTfnPrefix) {
+            // Unregistered generic TFN test -> ring all online
+            alignedExtNumbers = null;
+          } else {
+            // TFN exists in database BUT has 0 extensions mapped to it!
+            // IVR Announcement: "No extensions assigned to this TFN"
+            sendToAgent(ws.agentId, {
+              type: 'call_failed',
+              data: {
+                cause: `🔊 IVR: No extensions are currently mapped to TFN ${cleanTo}. Please assign extensions in Admin Portal.`,
+              },
+            });
+            log.warn(`IVR triggered: Call to TFN ${cleanTo} failed because no extensions are mapped to this TFN.`);
+            break;
+          }
+
+          log.info(`📞 Inbound TFN Call [${cleanTo}] (${tfnRecord?.label || 'General Helpline'}). Mapped Extensions: ${alignedExtNumbers ? alignedExtNumbers.join(', ') : 'ALL'}`);
+
+          let rangCount = 0;
+          clients.forEach(({ ws: agentWs, extensionNumber: agentExt }, agentId) => {
+            // STRICT SEPARATION: Ring ONLY if agent is not caller AND agent's extension is aligned to THIS TFN
+            const isAligned = !alignedExtNumbers || alignedExtNumbers.includes(agentExt);
+
+            if (agentId !== ws.agentId && isAligned && agentWs.readyState === WebSocket.OPEN) {
+              rangCount++;
+              agentWs.send(JSON.stringify({
+                type: 'incoming_call',
+                data: {
+                  from: callerNumber || ws.extensionNumber,
+                  callerName: `🔊 IVR Helpline: ${tfnRecord?.label || 'Inbound TFN'} (${cleanTo})`,
+                  sdpOffer,
+                  callUuid: generatedUuid,
+                  isTfn: true,
+                  tfnNumber: cleanTo,
+                  tfnLabel: tfnRecord?.label || 'Inbound Helpline',
+                  trunkName: tfnRecord?.trunk?.name || 'Primary Carrier Gateway',
+                  ivrPrompt: `Welcome to ${tfnRecord?.label || '7XVOIP Helpline'}. Connecting your call to an aligned agent...`,
+                },
+              }));
+            }
+          });
+
+          if (rangCount === 0 && alignedExtNumbers) {
+            // Mapped extensions exist for this TFN, but NONE of them are online!
+            // IVR Announcement: "All agents for this TFN are currently offline or unavailable."
+            sendToAgent(ws.agentId, {
+              type: 'call_failed',
+              data: {
+                cause: `🔊 IVR: All agents for TFN ${cleanTo} (${tfnRecord?.label || 'Helpline'}) are currently offline or busy.`,
+              },
+            });
+            log.warn(`IVR triggered: TFN ${cleanTo} mapped extensions [${alignedExtNumbers.join(', ')}] are all offline.`);
+          } else {
+            sendToAgent(ws.agentId, {
+              type: 'call_progress',
+              data: { to: cleanTo, status: `IVR Active — Ringing ${rangCount} Aligned Extension(s)` },
+            });
+          }
+          break;
+        }
+
+        // ── DIRECT EXTENSION TO EXTENSION OR OUTBOUND PSTN CALL ──
+        const targetExtNumber = (to || '').split('@')[0].replace(/^\+/, '').trim();
+        const isInternalExt = /^\d{4}$/.test(targetExtNumber);
+
+        if (isInternalExt) {
+          const targetAgentId = extensionToAgent.get(targetExtNumber) || extensionToAgent.get(to);
+
+          if (!targetAgentId || !clients.has(targetAgentId)) {
+            sendToAgent(ws.agentId, {
+              type: 'call_failed',
+              data: { cause: `Extension ${targetExtNumber || to} is currently offline or not logged into dashboard.` },
+            });
+            return;
+          }
+
+          // Forward incoming call to target agent
+          sendToAgent(targetAgentId, {
+            type: 'incoming_call',
+            data: {
+              from: callerNumber || ws.extensionNumber,
+              callerName: callerName || `Agent Ext ${ws.extensionNumber}`,
+              sdpOffer,
+              callUuid: generatedUuid,
+            },
+          });
+
+          // Notify caller that remote is ringing
+          sendToAgent(ws.agentId, {
+            type: 'call_progress',
+            data: { to, status: 'Ringing' },
+          });
+
+          // Update statuses to RINGING
+          try {
+            await prisma.agent.updateMany({
+              where: { id: { in: [ws.agentId, targetAgentId] } },
+              data: { status: AGENT_STATUS.RINGING },
+            });
+          } catch {}
+        } else {
+          // ── OUTBOUND CALL VIA DYNAMIC SIP TRUNK ──
+          // Look up the extension's TFN → Trunk chain from the database
+          let callerId = config.trunk.did || '+18885752806';
+          let assignedTrunk = null;
+          let trunkDisplayName = 'Default SIP Gateway';
+
+          try {
+            const extRecord = await prisma.extension.findUnique({
+              where: { number: ws.extensionNumber },
+              include: {
+                tfn: {
+                  include: {
+                    trunk: true,
+                  },
+                },
+              },
+            });
+
+            if (extRecord && extRecord.tfn) {
+              callerId = extRecord.tfn.number;
+
+              // If TFN has a linked SIP trunk from admin panel, use it
+              if (extRecord.tfn.trunk && extRecord.tfn.trunk.enabled) {
+                assignedTrunk = extRecord.tfn.trunk;
+                trunkDisplayName = `${assignedTrunk.name} (${assignedTrunk.provider || 'SIP'})`;
+              }
+            }
+          } catch (e) {}
+
+          log.info(`📞 Routing Outbound PSTN Call [${cleanTo}] via ${trunkDisplayName}`);
+
+          // Originate via FreeSWITCH if connected
+          try {
+            if (freeswitchService.isConnected()) {
+              if (assignedTrunk) {
+                // Dynamic trunk routing — use trunk config from database
+                await freeswitchService.originateCallViaTrunk(
+                  ws.extensionNumber,
+                  cleanTo,
+                  config.sip.domain,
+                  callerId,
+                  {
+                    host: assignedTrunk.host,
+                    port: assignedTrunk.port,
+                    username: assignedTrunk.username,
+                    password: assignedTrunk.password,
+                    name: assignedTrunk.name,
+                  }
+                );
+              } else {
+                // Default gateway routing (sip-trunk from internal.xml)
+                await freeswitchService.originateCall(ws.extensionNumber, cleanTo, config.sip.domain, callerId);
+              }
+            }
+          } catch (e) {
+            log.warn(`FreeSWITCH ESL call originate failed: ${e.message}. Signalling call progress...`);
+          }
+
+          sendToAgent(ws.agentId, {
+            type: 'call_progress',
+            data: { to: cleanTo, status: `Routing via ${trunkDisplayName} (${callerId})` },
+          });
+        }
         break;
       }
 
@@ -198,7 +365,31 @@ async function handleMessage(ws, rawData) {
               data: { status: AGENT_STATUS.IN_CALL },
             });
           } catch {}
+        } else {
+          // If TFN ring-all call, broadcast call_accepted to all online clients
+          broadcast({
+            type: 'call_accepted',
+            data: { from: ws.extensionNumber, sdpAnswer, callUuid },
+          });
         }
+
+        // Notify all other agents to stop ringing (call taken)
+        clients.forEach(({ ws: agentWs }, agentId) => {
+          if (agentId !== ws.agentId && agentWs.readyState === WebSocket.OPEN) {
+            agentWs.send(JSON.stringify({
+              type: 'call_taken',
+              data: { callUuid, answeredBy: ws.extensionNumber },
+            }));
+          }
+        });
+
+        // Update agent to IN_CALL
+        try {
+          await prisma.agent.update({
+            where: { id: ws.agentId },
+            data: { status: AGENT_STATUS.IN_CALL },
+          });
+        } catch {}
         break;
       }
 
@@ -222,12 +413,19 @@ async function handleMessage(ws, rawData) {
         break;
       }
 
-      case 'call_hangup': {
+      case 'call_hangup':
+      case 'call_terminate': {
         const { to, callUuid, duration, callerNumber, calleeNumber, status } = data;
-        const targetAgentId = extensionToAgent.get(to);
+        const cleanTargetExt = (to || '').split('@')[0].replace(/^\+/, '').trim();
+        const targetAgentId = extensionToAgent.get(cleanTargetExt) || extensionToAgent.get(to);
 
         if (targetAgentId) {
           sendToAgent(targetAgentId, {
+            type: 'call_ended',
+            data: { by: ws.extensionNumber, callUuid, duration },
+          });
+        } else {
+          broadcast({
             type: 'call_ended',
             data: { by: ws.extensionNumber, callUuid, duration },
           });

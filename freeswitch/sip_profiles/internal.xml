@@ -10,21 +10,36 @@
 -->
 <profile name="internal">
   <aliases>
-    <alias name="kradglobal.com"/>
+    <alias name="7xvoip.com"/>
   </aliases>
 
   <gateways>
     <!--
-      SIP Trunk Gateway — Configure your SIP provider here.
-      Replace values with your actual SIP trunk credentials.
+      Twilio SIP Trunk Gateway (7xvoip)
+      Used for outbound PSTN calls via Twilio Programmable Voice
     -->
     <gateway name="sip-trunk">
-      <param name="username" value="YOUR_TRUNK_USERNAME"/>
-      <param name="password" value="YOUR_TRUNK_PASSWORD"/>
-      <param name="realm" value="sip.provider.com"/>
-      <param name="proxy" value="sip.provider.com"/>
-      <param name="register" value="true"/>
-      <param name="caller-id-in-from" value="false"/>
+      <param name="username" value="7xvoip"/>
+      <param name="password" value="7Xvoip@22001!"/>
+      <param name="realm" value="7xvoip.sip.twilio.com"/>
+      <param name="proxy" value="7xvoip.pstn.twilio.com"/>
+      <param name="register" value="false"/>
+      <param name="caller-id-in-from" value="true"/>
+      <param name="retry-seconds" value="30"/>
+      <param name="expire-seconds" value="3600"/>
+    </gateway>
+
+    <!--
+      Twilio Elastic SIP Trunking Gateway (Termination)
+      Alternative outbound path referenced in dialplan
+    -->
+    <gateway name="trunk-twilio-elastic">
+      <param name="username" value="7xvoip"/>
+      <param name="password" value="7Xvoip@22001!"/>
+      <param name="realm" value="7xvoip.pstn.twilio.com"/>
+      <param name="proxy" value="7xvoip.pstn.twilio.com"/>
+      <param name="register" value="false"/>
+      <param name="caller-id-in-from" value="true"/>
       <param name="retry-seconds" value="30"/>
       <param name="expire-seconds" value="3600"/>
     </gateway>
@@ -74,7 +89,7 @@
     <param name="inbound-codec-negotiation" value="generous"/>
     
     <!-- ── Authentication ─────────────────────── -->
-    <param name="challenge-realm" value="kradglobal.com"/>
+    <param name="challenge-realm" value="7xvoip.com"/>
     <param name="auth-calls" value="true"/>
     <param name="log-auth-failures" value="true"/>
     
@@ -101,8 +116,8 @@
     
     <!-- ── Misc ───────────────────────────────── -->
     <param name="manage-presence" value="true"/>
-    <param name="presence-hosts" value="kradglobal.com"/>
+    <param name="presence-hosts" value="7xvoip.com"/>
     <param name="send-message-query-on-register" value="true"/>
-    <param name="user-agent-string" value="KRAD-Global-PBX"/>
+    <param name="user-agent-string" value="7XVOIP-PBX"/>
   </settings>
 </profile>

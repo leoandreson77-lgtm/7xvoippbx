@@ -14,16 +14,16 @@ function generateHa1(username, realm, password) {
 async function main() {
   console.log('🌱 Seeding database...\n');
 
-  const realm = process.env.SIP_DOMAIN || 'kradglobal.com';
+  const realm = process.env.SIP_DOMAIN || '7xvoip.com';
   const SALT_ROUNDS = 12;
 
   // ── Default Agents ──────────────────────────────
   const agents = [
-    { name: 'Admin User', email: 'admin@kradglobal.com', password: 'Admin@123', role: 'admin' },
-    { name: 'Agent Sameer', email: 'sameer@kradglobal.com', password: 'Agent@123', role: 'agent' },
-    { name: 'Agent Priya', email: 'priya@kradglobal.com', password: 'Agent@123', role: 'agent' },
-    { name: 'Agent Rahul', email: 'rahul@kradglobal.com', password: 'Agent@123', role: 'agent' },
-    { name: 'Agent Anita', email: 'anita@kradglobal.com', password: 'Agent@123', role: 'agent' },
+    { name: 'Admin User', email: 'admin@7xvoip.com', password: 'Admin@123', role: 'admin' },
+    { name: 'Agent Sameer', email: 'sameer@7xvoip.com', password: 'Agent@123', role: 'agent' },
+    { name: 'Agent Priya', email: 'priya@7xvoip.com', password: 'Agent@123', role: 'agent' },
+    { name: 'Agent Rahul', email: 'rahul@7xvoip.com', password: 'Agent@123', role: 'agent' },
+    { name: 'Agent Anita', email: 'anita@7xvoip.com', password: 'Agent@123', role: 'agent' },
   ];
 
   const createdAgents = [];
@@ -92,18 +92,7 @@ async function main() {
   for (const tr of trunks) {
     const created = await prisma.sipTrunk.upsert({
       where: { id: tr.id },
-      update: {
-        name: tr.name,
-        provider: tr.provider,
-        host: tr.host,
-        port: tr.port,
-        username: tr.username,
-        password: tr.password,
-        didNumber: tr.didNumber,
-        realm: tr.realm,
-        enabled: tr.enabled,
-        status: tr.status,
-      },
+      update: {}, // Empty update so user modifications/deletions are preserved on restart
       create: tr,
     });
     createdTrunks.push(created);
@@ -114,6 +103,7 @@ async function main() {
   const tfns = [
     { number: '+18005550199', label: 'Sales Toll-Free (+1800)', trunkId: 'telnyx-primary' },
     { number: '+18885752806', label: 'Twilio Toll-Free (+1888)', trunkId: 'twilio-elastic' },
+    { number: '+17627446471', label: 'Twilio US Local DID (Georgia)', trunkId: 'twilio-elastic' },
     { number: '+911145678900', label: 'India Support DID', trunkId: 'airtel-india-sip' },
   ];
 
@@ -121,10 +111,7 @@ async function main() {
   for (const t of tfns) {
     const created = await prisma.tfnNumber.upsert({
       where: { number: t.number },
-      update: {
-        label: t.label,
-        trunkId: t.trunkId,
-      },
+      update: {}, // Empty update so user modifications/deletions are preserved
       create: {
         number: t.number,
         label: t.label,
@@ -171,69 +158,67 @@ async function main() {
 
     // ── Seed Sample CDRs for this extension
     if (ext.number === '1001') {
-      await prisma.callLog.createMany({
-        data: [
-          {
-            extensionId: extRecord.id,
-            tfnNumber: '+18005550199',
-            direction: 'inbound',
-            callerNumber: '+12176266046',
-            calleeNumber: '+18005550199',
-            status: 'answered',
-            duration: 184,
-            region: 'US (Illinois)',
-            startedAt: new Date(Date.now() - 3600000 * 2),
-            answeredAt: new Date(Date.now() - 3600000 * 2 + 5000),
-            endedAt: new Date(Date.now() - 3600000 * 2 + 189000),
-            callUuid: 'seed-uuid-1',
-          },
-          {
-            extensionId: extRecord.id,
-            tfnNumber: '+18005550199',
-            direction: 'outbound',
-            callerNumber: '+18005550199',
-            calleeNumber: '+13252891153',
-            status: 'answered',
-            duration: 312,
-            region: 'US (Texas)',
-            startedAt: new Date(Date.now() - 3600000 * 5),
-            answeredAt: new Date(Date.now() - 3600000 * 5 + 8000),
-            endedAt: new Date(Date.now() - 3600000 * 5 + 320000),
-            callUuid: 'seed-uuid-2',
-          },
-          {
-            extensionId: extRecord.id,
-            tfnNumber: '+18005550199',
-            direction: 'inbound',
-            callerNumber: '+18772518760',
-            calleeNumber: '+18005550199',
-            status: 'missed',
-            duration: 0,
-            region: 'US (Toll-Free)',
-            startedAt: new Date(Date.now() - 3600000 * 12),
-            callUuid: 'seed-uuid-3',
-          },
-        ],
-      });
-    } else if (ext.number === '1002') {
-      await prisma.callLog.createMany({
-        data: [
-          {
-            extensionId: extRecord.id,
-            tfnNumber: '+18005550200',
-            direction: 'inbound',
-            callerNumber: '+18552533640',
-            calleeNumber: '+18005550200',
-            status: 'answered',
-            duration: 425,
-            region: 'US (Support)',
-            startedAt: new Date(Date.now() - 3600000 * 1),
-            answeredAt: new Date(Date.now() - 3600000 * 1 + 4000),
-            endedAt: new Date(Date.now() - 3600000 * 1 + 429000),
-            callUuid: 'seed-uuid-4',
-          },
-        ],
-      });
+      const existingLogsCount = await prisma.callLog.count();
+      if (existingLogsCount === 0) {
+        await prisma.callLog.createMany({
+          data: [
+            {
+              extensionId: extRecord.id,
+              tfnNumber: '+18005550199',
+              direction: 'inbound',
+              callerNumber: '+12176266046',
+              calleeNumber: '+18005550199',
+              status: 'answered',
+              duration: 184,
+              region: 'US (Illinois)',
+              startedAt: new Date(Date.now() - 3600000 * 2),
+              answeredAt: new Date(Date.now() - 3600000 * 2 + 5000),
+              endedAt: new Date(Date.now() - 3600000 * 2 + 189000),
+              callUuid: 'seed-uuid-1',
+            },
+            {
+              extensionId: extRecord.id,
+              tfnNumber: '+18005550199',
+              direction: 'outbound',
+              callerNumber: '+18005550199',
+              calleeNumber: '+13252891153',
+              status: 'answered',
+              duration: 312,
+              region: 'US (Texas)',
+              startedAt: new Date(Date.now() - 3600000 * 5),
+              answeredAt: new Date(Date.now() - 3600000 * 5 + 8000),
+              endedAt: new Date(Date.now() - 3600000 * 5 + 320000),
+              callUuid: 'seed-uuid-2',
+            },
+            {
+              extensionId: extRecord.id,
+              tfnNumber: '+18005550199',
+              direction: 'inbound',
+              callerNumber: '+18772518760',
+              calleeNumber: '+18005550199',
+              status: 'missed',
+              duration: 0,
+              region: 'US (Toll-Free)',
+              startedAt: new Date(Date.now() - 3600000 * 12),
+              callUuid: 'seed-uuid-3',
+            },
+            {
+              extensionId: extRecord.id,
+              tfnNumber: '+18005550199',
+              direction: 'outbound',
+              callerNumber: '+18005550199',
+              calleeNumber: '+14155552671',
+              status: 'answered',
+              duration: 95,
+              region: 'US (California)',
+              startedAt: new Date(Date.now() - 3600000 * 20),
+              answeredAt: new Date(Date.now() - 3600000 * 20 + 3000),
+              endedAt: new Date(Date.now() - 3600000 * 20 + 98000),
+              callUuid: 'seed-uuid-4',
+            },
+          ],
+        });
+      }
     }
   }
 
@@ -243,7 +228,7 @@ async function main() {
   console.log('  Extension 1002 / Password: Agent@123 (Agent Priya - TFN: +18005550200)');
   console.log('  Extension 1003 / Password: Agent@123 (Agent Rahul - TFN: +911145678900)');
   console.log('  Extension 1004 / Password: Agent@123 (Agent Anita - TFN: +18005550199)');
-  console.log('  Admin: admin@kradglobal.com / Admin@123');
+  console.log('  Admin: admin@7xvoip.com / Admin@123');
 }
 
 main()

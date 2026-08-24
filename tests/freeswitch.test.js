@@ -23,7 +23,7 @@ describe('FreeSWITCH mod_xml_curl', () => {
       const res = await request(app)
         .post('/fs-config')
         .type('form')
-        .send({ section: 'dialplan', domain: 'kradglobal.com' });
+        .send({ section: 'dialplan', domain: '7xvoip.com' });
 
       expect(res.status).toBe(200);
       expect(res.type).toContain('xml');
@@ -34,7 +34,7 @@ describe('FreeSWITCH mod_xml_curl', () => {
       const res = await request(app)
         .post('/fs-config')
         .type('form')
-        .send({ section: 'directory', user: 'nonexistent', domain: 'kradglobal.com' });
+        .send({ section: 'directory', user: 'nonexistent', domain: '7xvoip.com' });
 
       expect(res.status).toBe(200);
       expect(res.type).toContain('xml');
@@ -45,7 +45,7 @@ describe('FreeSWITCH mod_xml_curl', () => {
       const res = await request(app)
         .post('/fs-config')
         .type('form')
-        .send({ section: 'directory', domain: 'kradglobal.com' });
+        .send({ section: 'directory', domain: '7xvoip.com' });
 
       expect(res.status).toBe(200);
       expect(res.type).toContain('xml');

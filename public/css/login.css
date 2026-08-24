@@ -201,3 +201,21 @@
   color: var(--text-muted);
   font-size: var(--font-xs);
 }
+
+/* 📱 Responsive Mobile Rules (< 480px) */
+@media (max-width: 480px) {
+  .login-container {
+    padding: var(--space-3);
+  }
+  .login-card {
+    padding: var(--space-6) var(--space-4);
+  }
+  .login-logo {
+    width: 48px;
+    height: 48px;
+    font-size: 1.25rem;
+  }
+  .login-header h1 {
+    font-size: 1.25rem;
+  }
+}

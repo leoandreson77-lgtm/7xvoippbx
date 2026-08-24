@@ -32,14 +32,21 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net"],
-      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      baseUri: ["'self'"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      formAction: ["'self'"],
+      frameAncestors: ["'self'"],
+      imgSrc: ["'self'", "data:", "blob:"],
+      objectSrc: ["'none'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net"],
+      scriptSrcAttr: ["'none'"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       connectSrc: ["'self'", "wss:", "ws:", "https:", "http:"],
       mediaSrc: ["'self'", "blob:", "mediastream:"],
-      imgSrc: ["'self'", "data:", "blob:"],
-    },
+      upgradeInsecureRequests: null
+    }
   },
+  hsts: false
 }));
 
 app.use(cors({
@@ -80,11 +87,11 @@ app.use('/api/admin', adminRoutes);
 app.use('/fs-config', freeswitchRoutes);
 
 // ── SPA Fallback ──────────────────────────────────
-app.get('/dashboard', (req, res) => {
-  res.sendFile(path.join(__dirname, '..', 'public', 'dashboard.html'));
-});
-app.get('/admin', (req, res) => {
-  res.sendFile(path.join(__dirname, '..', 'public', 'admin.html'));
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api') || req.path.startsWith('/fs-config')) {
+    return next();
+  }
+  res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
 });
 
 // ── Error Handling ────────────────────────────────
@@ -109,7 +116,7 @@ if (require.main === module) {
   freeswitchService.connect(eventService.handleFreeSwitchEvent);
 
   server.listen(config.port, () => {
-    log.info(`🚀 KRAD Global Agent System running on http://localhost:${config.port}`);
+    log.info(`🚀 7XVOIP Agent System running on http://localhost:${config.port}`);
     log.info(`   Environment: ${config.nodeEnv}`);
     log.info(`   SIP Domain:  ${config.sip.domain}`);
     log.info(`   ESL Target:  ${config.freeswitch.host}:${config.freeswitch.port}`);

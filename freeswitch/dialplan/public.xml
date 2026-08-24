@@ -1,36 +1,59 @@
 <!--
-  Public Dialplan — Inbound Calls from SIP Trunk
-  
-  Routes incoming calls from the SIP provider to the correct extension.
-  
+  Public Dialplan — Inbound Calls from SIP Trunk (Twilio)
+
+  Twilio sends calls to FreeSWITCH via SIP Origination URI.
+  This dialplan routes inbound DID calls to the correct agent extensions.
+
   Copy to: /etc/freeswitch/dialplan/public.xml
-  
-  IMPORTANT: 
-  - Replace DID_NUMBER with your actual DID/business number.
-  - Adjust the destination extension (1001) as needed.
-  - For IVR, replace the bridge with an IVR application.
 -->
 <include>
   <context name="public">
-    
-    <!-- ── Inbound DID Routing ────────────────────────── -->
-    <!-- Route all inbound calls to extension 1001 by default -->
-    <extension name="inbound-did">
-      <condition field="destination_number" expression="^(\+?91\d{10}|\d{10,15})$">
-        <action application="set" data="domain_name=kradglobal.com"/>
+
+    <!-- ── Inbound: Twilio TFN +18885752806 → Ring Extension 1002 ── -->
+    <extension name="inbound-twilio-1888">
+      <condition field="destination_number" expression="^\+?18885752806$">
+        <action application="set" data="domain_name=7xvoip.com"/>
         <action application="set" data="call_timeout=30"/>
         <action application="set" data="hangup_after_bridge=true"/>
         <action application="set" data="continue_on_fail=true"/>
-        
-        <!-- Transfer to default context for extension routing -->
+        <action application="set" data="effective_caller_id_name=${caller_id_name}"/>
+        <action application="set" data="effective_caller_id_number=${caller_id_number}"/>
+        <!-- Transfer to extension 1002 which is mapped to this TFN -->
+        <action application="transfer" data="1002 XML default"/>
+      </condition>
+    </extension>
+
+    <!-- ── Inbound: Twilio Local DID +17627446471 → Ring All Online Agents ── -->
+    <extension name="inbound-twilio-local">
+      <condition field="destination_number" expression="^\+?17627446471$">
+        <action application="set" data="domain_name=7xvoip.com"/>
+        <action application="set" data="call_timeout=30"/>
+        <action application="set" data="hangup_after_bridge=true"/>
+        <action application="set" data="continue_on_fail=true"/>
+        <!-- Ring group: try ext 1001, 1002, 1003, 1004 simultaneously -->
+        <action application="bridge" data="user/1001@7xvoip.com,user/1002@7xvoip.com,user/1003@7xvoip.com,user/1004@7xvoip.com"/>
+        <!-- If no answer, play busy -->
+        <action application="answer"/>
+        <action application="playback" data="ivr/ivr-all_agents_busy.wav"/>
+        <action application="hangup"/>
+      </condition>
+    </extension>
+
+    <!-- ── Inbound: Any US 10/11-digit DID → Default Ring (1001) ── -->
+    <extension name="inbound-did-default">
+      <condition field="destination_number" expression="^\+?1?(\d{10})$">
+        <action application="set" data="domain_name=7xvoip.com"/>
+        <action application="set" data="call_timeout=30"/>
+        <action application="set" data="hangup_after_bridge=true"/>
+        <action application="set" data="continue_on_fail=true"/>
         <action application="transfer" data="1001 XML default"/>
       </condition>
     </extension>
 
-    <!-- ── Catch-all: Reject unmatched inbound calls ──── -->
+    <!-- ── Catch-all: Reject unmatched inbound calls ── -->
     <extension name="unmatched-inbound">
       <condition field="destination_number" expression=".*">
-        <action application="log" data="WARNING: Unmatched inbound call to ${destination_number}"/>
+        <action application="log" data="WARNING: Unmatched inbound call to ${destination_number} from ${caller_id_number}"/>
         <action application="hangup" data="NO_ROUTE_DESTINATION"/>
       </condition>
     </extension>

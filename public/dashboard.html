@@ -3,17 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Agent Dashboard — KRAD Global</title>
-  <meta name="description" content="KRAD Global Agent Dashboard — Make and receive calls via WebRTC.">
-  <link rel="stylesheet" href="/css/variables.css">
-  <link rel="stylesheet" href="/css/dashboard.css">
+  <title>Agent Dashboard — 7XVOIP</title>
+  <meta name="description" content="7XVOIP Agent Dashboard — Make and receive calls via WebRTC.">
+  <link rel="stylesheet" href="/css/variables.css?v=1.5.0">
+  <link rel="stylesheet" href="/css/dashboard.css?v=1.5.0">
+  <script src="/js/vue.global.js"></script>
 </head>
 <body>
   <div class="dashboard" id="dashboard">
     <!-- ── Top Bar ──────────────────────────────── -->
     <header class="topbar">
       <div class="topbar-left">
-        <span class="topbar-brand">KRAD Global</span>
+        <span class="topbar-brand">7XVOIP</span>
         <div class="topbar-divider"></div>
         <div class="topbar-info">
           <span>Welcome, <strong id="agentName">Agent</strong></span>
@@ -30,7 +31,7 @@
           <span id="sipStatusText">—</span>
         </div>
         <a href="/admin" id="adminBtn" class="btn btn-ghost" style="display:none; font-size: var(--font-sm);">🛠 Admin</a>
-        <button class="btn btn-ghost logout-btn" id="logoutBtn">Logout</button>
+        <button class="btn btn-ghost logout-btn" id="logoutBtn" onclick="window.agentLogout()" style="cursor: pointer;">Logout</button>
       </div>
     </header>
 

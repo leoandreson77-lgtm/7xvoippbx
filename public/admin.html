@@ -3,20 +3,23 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>KRAD Global — Enterprise PBX & Call Center Administration</title>
-  <meta name="description" content="KRAD Global Admin Panel — Modular Extension Management, CDR Report, Multi-Provider SIP Trunks, and Supervisor Controls.">
-  <link rel="stylesheet" href="/css/variables.css">
-  <link rel="stylesheet" href="/css/admin.css">
+  <title>7XVOIP — Enterprise PBX & Call Center Administration</title>
+  <meta name="description" content="7XVOIP Admin Panel — Modular Extension Management, CDR Report, Multi-Provider SIP Trunks, and Supervisor Controls.">
+  <link rel="stylesheet" href="/css/variables.css?v=1.5.0">
+  <link rel="stylesheet" href="/css/admin.css?v=1.5.0">
+  <script src="/js/vue.global.js"></script>
 </head>
 <body>
-  <div class="admin-layout">
+  <div id="toastContainer" class="toast-container"></div>
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+    <div class="admin-layout">
     
     <!-- ── Left Sidebar Navigation ───────────────── -->
     <aside class="admin-sidebar">
       <div class="sidebar-header">
         <span class="sidebar-logo">📞</span>
         <div>
-          <div class="sidebar-title">KRAD Global</div>
+          <div class="sidebar-title">7XVOIP</div>
           <div class="sidebar-subtitle">PBX Management</div>
         </div>
       </div>
@@ -57,7 +60,7 @@
           <span>🎧</span>
           <span>Switch to Agent Dialer</span>
         </a>
-        <button class="btn btn-ghost" id="adminLogoutBtn" style="font-size: var(--font-xs); justify-content: flex-start; gap: var(--space-2); color: var(--danger);">
+        <button class="btn btn-ghost" id="adminLogoutBtn" onclick="window.adminLogout()" style="font-size: var(--font-xs); justify-content: flex-start; gap: var(--space-2); color: var(--danger); cursor: pointer;">
           <span>🚪</span>
           <span>Sign Out</span>
         </button>
@@ -68,6 +71,7 @@
     <main class="admin-main">
       <!-- Top Sticky Bar -->
       <header class="admin-header">
+        <button class="mobile-nav-toggle" id="mobileNavToggle" aria-label="Toggle Navigation">☰</button>
         <div class="header-title-group">
           <h1 id="pageTitle">System Overview</h1>
           <p id="pageSubtitle">Real-time health, active channels, and platform metrics</p>
@@ -115,7 +119,7 @@
             </div>
           </div>
 
-          <div style="display: grid; grid-template-columns: 2fr 1fr; gap: var(--space-6);">
+          <div class="overview-split-grid">
             <!-- Quick Recent Calls -->
             <div class="card" style="padding: var(--space-6);">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-4);">
@@ -153,6 +157,58 @@
               </button>
             </div>
           </div>
+
+          <!-- ── SIP Configuration & Server Credentials Cards ── -->
+          <div style="margin-top: var(--space-6);">
+            <h3 style="font-size: var(--font-base); font-weight: 600; margin-bottom: var(--space-4); display: flex; align-items: center; gap: 8px;">
+              <span>📡</span> SIP Server Configuration & Connection Details
+            </h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--space-4);">
+              
+              <!-- Card 1: WebRTC / WSS Config -->
+              <div class="card" style="padding: var(--space-5); border-left: 4px solid #6366f1;">
+                <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); font-weight: 600; margin-bottom: 6px;">WebRTC WebSocket (WSS)</div>
+                <div style="font-family: monospace; font-size: 13px; font-weight: 700; color: #818cf8; word-break: break-all;" id="sipWssUrlDisplay">wss://7xvoip.com:7443</div>
+                <div style="font-size: 11px; color: var(--text-secondary); margin-top: 8px; display: flex; justify-content: space-between;">
+                  <span>Port: <strong style="color: #fff;">7443 / 5066</strong></span>
+                  <span>TLS: <strong style="color: var(--success);">Active</strong></span>
+                </div>
+              </div>
+
+              <!-- Card 2: SIP Realm & Domain -->
+              <div class="card" style="padding: var(--space-5); border-left: 4px solid #38bdf8;">
+                <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); font-weight: 600; margin-bottom: 6px;">SIP Realm / Auth Domain</div>
+                <div style="font-family: monospace; font-size: 13px; font-weight: 700; color: #38bdf8;" id="sipRealmDisplay">7xvoip.com</div>
+                <div style="font-size: 11px; color: var(--text-secondary); margin-top: 8px; display: flex; justify-content: space-between;">
+                  <span>Port: <strong style="color: #fff;">5060 (UDP/TCP)</strong></span>
+                  <span>Header: <strong style="color: #fff;">7XVOIP-PBX</strong></span>
+                </div>
+              </div>
+
+              <!-- Card 3: FreeSWITCH ESL Core -->
+              <div class="card" style="padding: var(--space-5); border-left: 4px solid #22c55e;">
+                <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); font-weight: 600; margin-bottom: 6px;">FreeSWITCH Engine</div>
+                <div style="font-family: monospace; font-size: 13px; font-weight: 700; color: #4ade80;" id="fsEslDisplay">ESL: localhost:8021</div>
+                <div style="font-size: 11px; color: var(--text-secondary); margin-top: 8px; display: flex; justify-content: space-between;">
+                  <span>Codecs: <strong style="color: #fff;">OPUS, G722, PCMU</strong></span>
+                  <span>State: <strong style="color: var(--success);">Online</strong></span>
+                </div>
+              </div>
+
+              <!-- Card 4: Default Admin & Test Softphone Credentials -->
+              <div class="card" style="padding: var(--space-5); border-left: 4px solid #f59e0b;">
+                <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); font-weight: 600; margin-bottom: 6px;">Sample Extension Login</div>
+                <div style="font-family: monospace; font-size: 12px; color: #fbbf24;">
+                  Ext: <strong style="color: #fff;">1001</strong> | Pass: <strong style="color: #fff;">Agent@123</strong>
+                </div>
+                <div style="font-size: 11px; color: var(--text-secondary); margin-top: 8px; display: flex; justify-content: space-between;">
+                  <span>Domain: <strong style="color: #fff;">7xvoip.com</strong></span>
+                  <span>DID: <strong style="color: #fff;">+18005550199</strong></span>
+                </div>
+              </div>
+
+            </div>
+          </div>
         </section>
 
 
@@ -170,7 +226,9 @@
             </div>
           </div>
 
-          <div class="table-container">
+          <div class="cards-grid" id="extensionsGrid"></div>
+
+          <div class="table-container" style="margin-top: var(--space-6);">
             <table>
               <thead>
                 <tr>
@@ -314,7 +372,9 @@
             <button class="btn btn-primary" id="openCreateTfnModalBtn">+ Add New TFN Number</button>
           </div>
 
-          <div class="table-container">
+          <div class="cards-grid" id="tfnsGrid"></div>
+
+          <div class="table-container" style="margin-top: var(--space-6);">
             <table>
               <thead>
                 <tr>
@@ -346,7 +406,9 @@
             <button class="btn btn-primary" id="openCreateTrunkModalBtn">+ Add SIP Provider / Trunk</button>
           </div>
 
-          <div class="table-container">
+          <div class="cards-grid" id="trunksGrid"></div>
+
+          <div class="table-container" style="margin-top: var(--space-6);">
             <table>
               <thead>
                 <tr>
@@ -381,7 +443,9 @@
             <button class="btn btn-primary" id="openCreateAgentModalBtn">+ Create Agent Account</button>
           </div>
 
-          <div class="table-container">
+          <div class="cards-grid" id="agentsGrid"></div>
+
+          <div class="table-container" style="margin-top: var(--space-6);">
             <table>
               <thead>
                 <tr>
@@ -682,6 +746,151 @@
     </div>
   </div>
 
-  <script src="/js/admin.js"></script>
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- MODAL: SUPERVISOR & EXTENSION CONTROL            -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <div class="modal-overlay" id="modalSupervisorExt">
+    <div class="modal-card" style="max-width: 520px;">
+      <div class="modal-header">
+        <h3 class="modal-title">⚙️ Extension Control & Supervisor Panel</h3>
+        <button class="modal-close" data-close="modalSupervisorExt">✕</button>
+      </div>
+      <form class="modal-form" id="formSupervisorExt" onsubmit="return false;">
+        <input type="hidden" id="supExtId">
+
+        <div class="input-group">
+          <label>Extension Number</label>
+          <div style="display: flex; gap: var(--space-2);">
+            <input type="text" id="supExtNumber" readonly style="font-weight: 700; font-family: monospace;">
+            <button type="button" class="btn btn-ghost" id="copyExtNumBtn">📋 Copy</button>
+          </div>
+        </div>
+
+        <div class="input-group">
+          <label>SIP Password</label>
+          <div style="display: flex; gap: var(--space-2);">
+            <input type="password" id="supExtPassword" placeholder="SIP Password">
+            <button type="button" class="btn btn-ghost" id="supTogglePassBtn">👁</button>
+            <button type="button" class="btn btn-ghost" id="copyExtPassBtn">📋 Copy</button>
+          </div>
+        </div>
+
+        <div class="input-group">
+          <label>Outbound Caller ID / Assigned TFN</label>
+          <select id="supCallerIdSelect">
+            <option value="">— Default Trunk DID —</option>
+          </select>
+        </div>
+
+        <div class="sup-grid-2" style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3);">
+          <div class="input-group">
+            <label>Max Login Locations</label>
+            <input type="number" id="supMaxLocations" min="1" max="10" value="1">
+          </div>
+          <div class="input-group">
+            <label>Calls Receive On</label>
+            <select id="supCallsReceiveOn">
+              <option value="Extension">Extension Softphone</option>
+              <option value="Mobile Forward">Mobile Forward</option>
+              <option value="Voicemail">Voicemail</option>
+              <option value="Ring Group">Ring Group</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="supervisor-actions-bar" style="display: flex; justify-content: space-around; padding-top: var(--space-4); border-top: 1px solid var(--border-subtle); margin-top: var(--space-2);">
+          <button type="button" class="sup-action-circle" onclick="window.runSupervisorAction('listen')">
+            <span class="sup-circle-icon">👂</span>
+            <span class="sup-action-label">Listen</span>
+          </button>
+          <button type="button" class="sup-action-circle" onclick="window.runSupervisorAction('whisper')">
+            <span class="sup-circle-icon">🗣️</span>
+            <span class="sup-action-label">Whisper</span>
+          </button>
+          <button type="button" class="sup-action-circle" onclick="window.runSupervisorAction('barge')">
+            <span class="sup-circle-icon">🎙️</span>
+            <span class="sup-action-label">Barge</span>
+          </button>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: var(--space-3); margin-top: var(--space-4);">
+          <button type="button" class="btn btn-ghost" data-close="modalSupervisorExt">Cancel</button>
+          <button type="button" class="btn btn-primary" id="saveSupSettingsBtn">Save Settings</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- MODAL: VIEW AGENT / EXTENSION SIP CREDENTIALS  -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <div class="modal-overlay" id="modalSipCredentials">
+    <div class="modal-card" style="max-width: 520px;">
+      <div class="modal-header">
+        <h3 class="modal-title">🔐 SIP Configuration & Credentials</h3>
+        <button class="modal-close" data-close="modalSipCredentials">✕</button>
+      </div>
+      <div style="padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3);">
+        <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: var(--space-3);">
+          <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Extension / User Account</div>
+          <div style="font-size: 18px; font-weight: 700; color: var(--accent-light);" id="sipCredExt">—</div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3);">
+          <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: var(--space-3);">
+            <div style="font-size: 11px; color: var(--text-muted);">SIP Username</div>
+            <div style="font-family: monospace; font-size: 14px; color: var(--text-primary);" id="sipCredUser">—</div>
+          </div>
+          <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: var(--space-3);">
+            <div style="font-size: 11px; color: var(--text-muted);">SIP Password</div>
+            <div style="font-family: monospace; font-size: 14px; color: var(--accent-light);" id="sipCredPass">—</div>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3);">
+          <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: var(--space-3);">
+            <div style="font-size: 11px; color: var(--text-muted);">SIP Domain / Realm</div>
+            <div style="font-family: monospace; font-size: 13px; color: var(--text-secondary);" id="sipCredDomain">7xvoip.com</div>
+          </div>
+          <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: var(--space-3);">
+            <div style="font-size: 11px; color: var(--text-muted);">WebRTC WSS URL</div>
+            <div style="font-family: monospace; font-size: 12px; color: #38bdf8;" id="sipCredWss">wss://7xvoip.com:7443</div>
+          </div>
+        </div>
+
+        <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: var(--space-3);">
+          <div style="font-size: 11px; color: var(--text-muted);">Outbound Toll-Free Number (TFN)</div>
+          <div style="font-family: monospace; font-size: 13px; color: #a855f7;" id="sipCredTfn">Not Assigned</div>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: var(--space-3); margin-top: var(--space-3);">
+          <button type="button" class="btn btn-ghost" data-close="modalSipCredentials">Close</button>
+          <button type="button" class="btn btn-primary" onclick="window.copySipCredentials()">📋 Copy All Credentials</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- MODAL: CUSTOM CONFIRMATION DIALOG               -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <div class="modal-overlay" id="modalConfirmDialog">
+    <div class="modal-card" style="max-width: 420px; text-align: center; padding: 28px 24px;">
+      <div class="confirm-icon-badge">
+        <span id="confirmIcon">⚠️</span>
+      </div>
+      <h3 class="modal-title" id="confirmTitle" style="margin-top: 12px; margin-bottom: 8px; justify-content: center;">Confirm Action</h3>
+      <p id="confirmMessage" style="color: var(--text-secondary); font-size: 14px; line-height: 1.5; margin-bottom: 24px;">
+        Are you sure you want to proceed?
+      </p>
+
+      <div style="display: flex; justify-content: center; gap: 12px;">
+        <button type="button" class="btn btn-ghost" id="confirmCancelBtn" style="min-width: 100px;">Cancel</button>
+        <button type="button" class="btn btn-danger" id="confirmOkBtn" style="min-width: 130px; background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); box-shadow: 0 4px 14px rgba(239, 68, 68, 0.4);">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/admin.js?v=1.5.3"></script>
 </body>
 </html>

@@ -16,7 +16,7 @@
         <action application="set" data="call_timeout=30"/>
         <action application="set" data="hangup_after_bridge=true"/>
         <action application="set" data="continue_on_fail=true"/>
-        <action application="bridge" data="user/$1@kradglobal.com"/>
+        <action application="bridge" data="user/$1@7xvoip.com"/>
         <!-- If not answered, play message -->
         <action application="answer"/>
         <action application="playback" data="ivr/ivr-the_person_at_extension.wav"/>
@@ -33,11 +33,11 @@
     -->
     <extension name="outbound-calls">
       <condition field="destination_number" expression="^(\+?\d{10,15})$">
-        <action application="set" data="effective_caller_id_name=KRAD Global"/>
+        <action application="set" data="effective_caller_id_name=7XVOIP"/>
         <action application="set" data="effective_caller_id_number=${outbound_caller_id_number}"/>
         <action application="set" data="hangup_after_bridge=true"/>
         <action application="set" data="call_timeout=60"/>
-        <action application="bridge" data="sofia/gateway/sip-trunk/$1"/>
+        <action application="bridge" data="sofia/gateway/trunk-twilio-elastic/$1|sofia/gateway/sip-trunk/$1"/>
       </condition>
     </extension>
 

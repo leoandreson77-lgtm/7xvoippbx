@@ -104,26 +104,7 @@ router.put('/extensions/:id', async (req, res, next) => {
   }
 });
 
-/**
- * DELETE /api/admin/extensions/:id
- * Delete an extension.
- */
-router.delete('/extensions/:id', async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    const extension = await extensionService.deleteExtension(id);
 
-    try {
-      await freeswitchService.reloadXml();
-    } catch {
-      // Best effort reload
-    }
-
-    res.json({ success: true, deleted: extension.number });
-  } catch (err) {
-    next(err);
-  }
-});
 
 // ── Agent Management ──────────────────────────────
 
@@ -248,6 +229,18 @@ router.delete('/agents/:id', async (req, res, next) => {
       return res.status(403).json({ error: 'Admin accounts are protected and cannot be deleted.' });
     }
 
+    // Unlink extension assigned to this agent first to avoid FK constraint failure
+    await prisma.extension.updateMany({
+      where: { agentId: id },
+      data: { agentId: null },
+    });
+
+    // Unlink audit logs
+    await prisma.auditLog.updateMany({
+      where: { agentId: id },
+      data: { agentId: null },
+    });
+
     await prisma.agent.delete({ where: { id } });
     res.json({ success: true, message: `Agent ${agent.name} deleted` });
   } catch (err) {
@@ -304,8 +297,14 @@ router.get('/trunks', async (req, res, next) => {
         try {
           liveStatus = await freeswitchService.getGatewayStatus(`trunk-${t.id}`);
         } catch {}
+
+        // Compute SIP URI for display
+        const sipUri = `sip:${t.username || 'user'}@${t.host}:${t.port || 5060}`;
+
         return {
           ...t,
+          sipUri,
+          linkedTfnCount: t.tfns ? t.tfns.length : 0,
           liveStatus: liveStatus.status,
           registered: liveStatus.registered,
         };
@@ -388,11 +387,18 @@ router.put('/trunks/:id', async (req, res, next) => {
 
 /**
  * DELETE /api/admin/trunks/:id
- * Delete a SIP Trunk.
+ * Delete a SIP Trunk (unlinks associated TFNs first).
  */
 router.delete('/trunks/:id', async (req, res, next) => {
   try {
     const { id } = req.params;
+
+    // Unlink any TFNs linked to this trunk first to avoid foreign key failure
+    await prisma.tfnNumber.updateMany({
+      where: { trunkId: id },
+      data: { trunkId: null },
+    });
+
     await prisma.sipTrunk.delete({ where: { id } });
     res.json({ success: true, message: 'SIP Trunk deleted' });
   } catch (err) {
@@ -504,12 +510,67 @@ router.post('/tfns', async (req, res, next) => {
 });
 
 /**
+ * PUT /api/admin/tfns/:id
+ * Update TFN / DID number label, trunkId, and aligned extension mappings.
+ */
+router.put('/tfns/:id', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { label, trunkId, extensionIds } = req.body;
+
+    const updateData = {};
+    if (label !== undefined) updateData.label = sanitize(label);
+    if (trunkId !== undefined) updateData.trunkId = trunkId || null;
+
+    await prisma.tfnNumber.update({
+      where: { id },
+      data: updateData,
+    });
+
+    // If extensionIds array is passed, update aligned extensions
+    if (Array.isArray(extensionIds)) {
+      // First disconnect extensions currently mapped to this TFN that are not in the new list
+      await prisma.extension.updateMany({
+        where: { tfnId: id, id: { notIn: extensionIds } },
+        data: { tfnId: null },
+      });
+      // Then connect specified extensions to this TFN
+      if (extensionIds.length > 0) {
+        await prisma.extension.updateMany({
+          where: { id: { in: extensionIds } },
+          data: { tfnId: id },
+        });
+      }
+    }
+
+    const fullTfn = await prisma.tfnNumber.findUnique({
+      where: { id },
+      include: {
+        trunk: { select: { id: true, name: true } },
+        extensions: { select: { id: true, number: true } },
+      },
+    });
+
+    res.json(fullTfn);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
  * DELETE /api/admin/tfns/:id
- * Delete a TFN / DID number.
+ * Delete a TFN / DID number (unlinks assigned extensions first).
  */
 router.delete('/tfns/:id', async (req, res, next) => {
   try {
     const { id } = req.params;
+
+    // Unlink any extensions using this TFN as caller ID first
+    await prisma.extension.updateMany({
+      where: { tfnId: id },
+      data: { tfnId: null },
+    });
+
     await prisma.tfnNumber.delete({ where: { id } });
     res.json({ success: true, message: 'TFN deleted' });
   } catch (err) {
@@ -604,17 +665,24 @@ router.get('/cdr', async (req, res, next) => {
       return {
         id: log.id,
         callDate: log.startedAt,
+        startedAt: log.startedAt,
         answerTime: log.answeredAt || null,
+        answeredAt: log.answeredAt || null,
         endTime: log.endedAt || null,
-        direction: log.direction.toUpperCase(),
-        response: log.status.toUpperCase(),
-        source: log.callerNumber,
-        destination: log.calleeNumber,
+        endedAt: log.endedAt || null,
+        direction: (log.direction || 'OUTBOUND').toUpperCase(),
+        response: (log.status || 'UNKNOWN').toUpperCase(),
+        status: (log.status || 'UNKNOWN').toUpperCase(),
+        source: log.callerNumber || '—',
+        callerNumber: log.callerNumber || '—',
+        destination: log.calleeNumber || '—',
+        calleeNumber: log.calleeNumber || '—',
         extension: log.extension ? log.extension.number : '—',
         agentName: log.extension?.agent ? log.extension.agent.name : '—',
         tfnNumber: log.tfnNumber || log.extension?.tfn?.number || '—',
         region: log.region || 'US',
         durationSec: durSec,
+        duration: durSec,
         durationFormatted,
         callUuid: log.callUuid,
       };
@@ -720,6 +788,31 @@ router.put('/extensions/:id/settings', async (req, res, next) => {
     });
 
     res.json(updated);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * DELETE /api/admin/extensions/:id
+ * Delete an extension (deletes linked CallLogs first).
+ */
+router.delete('/extensions/:id', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const extension = await prisma.extension.findUnique({ where: { id } });
+    if (!extension) {
+      return res.status(404).json({ error: 'Extension not found' });
+    }
+
+    // Delete related CallLogs first to avoid foreign key constraint error
+    await prisma.callLog.deleteMany({
+      where: { extensionId: id },
+    });
+
+    await prisma.extension.delete({ where: { id } });
+    res.json({ success: true, deleted: extension.number });
   } catch (err) {
     next(err);
   }

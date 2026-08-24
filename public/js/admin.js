@@ -5,6 +5,22 @@
 (function () {
   'use strict';
 
+  window.adminLogout = function () {
+    try {
+      const token = localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
+      fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'include',
+        headers: token ? { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` } : { 'Content-Type': 'application/json' },
+      });
+    } catch { /* ignore */ }
+    try {
+      localStorage.clear();
+      sessionStorage.clear();
+    } catch { /* ignore */ }
+    window.location.replace('/');
+  };
+
   function getHeaders() {
     const token = localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
     const h = { 'Content-Type': 'application/json' };
@@ -13,6 +29,152 @@
     }
     return h;
   }
+
+  // ── Safe DOM Helpers & Modal Manager ────────────
+  function openModal(id) {
+    const el = document.getElementById(id);
+    if (el) {
+      el.classList.add('active');
+      el.classList.add('visible');
+      el.style.display = 'flex';
+    }
+  }
+
+  function closeModal(id) {
+    const el = document.getElementById(id);
+    if (el) {
+      el.classList.remove('active');
+      el.classList.remove('visible');
+      el.style.display = 'none';
+    }
+  }
+
+  window.openModal = openModal;
+  window.closeModal = closeModal;
+
+  function addClick(id, fn) {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('click', fn);
+  }
+
+  // Register Modal & Mobile Nav Trigger Buttons
+  addClick('openCreateExtModalBtn', () => openModal('modalCreateExt'));
+  addClick('openCreateTfnModalBtn', () => openModal('modalCreateTfn'));
+  addClick('openCreateTrunkModalBtn', () => openModal('modalCreateTrunk'));
+  addClick('openCreateAgentModalBtn', () => openModal('modalCreateAgent'));
+
+  // Mobile Sidebar Toggle
+  addClick('mobileNavToggle', () => {
+    const sidebar = document.querySelector('.admin-sidebar');
+    const backdrop = document.getElementById('sidebarBackdrop');
+    if (sidebar) sidebar.classList.toggle('open');
+    if (backdrop) backdrop.classList.toggle('active');
+  });
+
+  addClick('sidebarBackdrop', () => {
+    const sidebar = document.querySelector('.admin-sidebar');
+    const backdrop = document.getElementById('sidebarBackdrop');
+    if (sidebar) sidebar.classList.remove('open');
+    if (backdrop) backdrop.classList.remove('active');
+  });
+
+  // Admin Sign Out Event Handler
+  window.adminLogout = async function () {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include', headers: getHeaders() });
+    } catch { /* ignore */ }
+    localStorage.clear();
+    sessionStorage.clear();
+    window.location.href = '/';
+  };
+  addClick('adminLogoutBtn', window.adminLogout);
+
+  // ── Custom Confirm Dialog Manager ───────────────
+  let pendingConfirmAction = null;
+
+  function showConfirmDialog(options = {}) {
+    const titleEl = document.getElementById('confirmTitle');
+    const msgEl = document.getElementById('confirmMessage');
+    const okBtn = document.getElementById('confirmOkBtn');
+    const iconBadge = document.querySelector('.confirm-icon-badge');
+
+    if (titleEl) titleEl.textContent = options.title || 'Confirm Action';
+    if (msgEl) msgEl.innerHTML = options.message || 'Are you sure you want to proceed?';
+    if (okBtn) okBtn.textContent = options.okText || 'Confirm';
+    if (iconBadge && options.icon) iconBadge.textContent = options.icon;
+
+    pendingConfirmAction = options.onConfirm || null;
+    openModal('modalConfirmDialog');
+  }
+
+  addClick('confirmCancelBtn', () => {
+    pendingConfirmAction = null;
+    closeModal('modalConfirmDialog');
+  });
+
+  addClick('confirmOkBtn', async () => {
+    const action = pendingConfirmAction;
+    pendingConfirmAction = null;
+    closeModal('modalConfirmDialog');
+    if (action && typeof action === 'function') {
+      await action();
+    }
+  });
+
+  window.showConfirmDialog = showConfirmDialog;
+
+  // Global Modal Close Delegation
+  document.addEventListener('click', (e) => {
+    const closeBtn = e.target.closest('[data-close]');
+    if (closeBtn) {
+      const modalId = closeBtn.getAttribute('data-close');
+      closeModal(modalId);
+      return;
+    }
+    const modalClose = e.target.closest('.modal-close');
+    if (modalClose) {
+      const modal = modalClose.closest('.modal-overlay');
+      if (modal) closeModal(modal.id);
+      return;
+    }
+    if (e.target && e.target.classList && e.target.classList.contains('modal-overlay')) {
+      closeModal(e.target.id);
+    }
+  });
+
+  function setTxt(id, val) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val;
+  }
+
+  function showError(el, msg) {
+    if (!el) {
+      showToast(msg, 'error');
+      return;
+    }
+    el.textContent = msg;
+    el.style.display = 'block';
+  }
+
+  function showToast(msg, type = 'info') {
+    const container = document.getElementById('toastContainer');
+    if (!container) {
+      alert(msg);
+      return;
+    }
+    const toast = document.createElement('div');
+    toast.className = `toast-msg ${type}`;
+    const icon = type === 'success' ? '✓' : type === 'error' ? '❌' : 'ℹ️';
+    toast.innerHTML = `<span>${icon}</span><span>${msg}</span>`;
+    container.appendChild(toast);
+
+    setTimeout(() => {
+      toast.classList.add('fade-out');
+      setTimeout(() => toast.remove(), 300);
+    }, 4000);
+  }
+
+
 
   // ── State Storage ───────────────────────────────
   let allExtensions = [];
@@ -59,12 +221,23 @@
     });
 
     const meta = tabMetadata[tabId] || tabMetadata.overview;
-    document.getElementById('pageTitle').textContent = meta.title;
-    document.getElementById('pageSubtitle').textContent = meta.subtitle;
+    setTxt('pageTitle', meta.title);
+    setTxt('pageSubtitle', meta.subtitle);
+
+    // Sync overview stats & badges on every tab switch
+    loadOverviewStats();
 
     // Trigger specific data loads on tab switch
-    if (tabId === 'extensions') {
+    if (tabId === 'overview') {
+      loadOverviewStats();
+      loadTrunks();
       loadExtensions();
+      loadTfns();
+      loadAgents();
+    } else if (tabId === 'extensions') {
+      loadExtensions();
+      loadUnassignedAgentsDropdown();
+      loadTfnsDropdown();
     } else if (tabId === 'cdr') {
       loadCdrReport();
       loadCdrExtensionsDropdown();
@@ -86,21 +259,8 @@
   });
 
   // ── Modal Handlers ──────────────────────────────
-  function openModal(modalId) {
-    const modal = document.getElementById(modalId);
-    if (modal) modal.classList.add('visible');
-  }
-
-  function closeModal(modalId) {
-    const modal = document.getElementById(modalId);
-    if (modal) {
-      modal.classList.remove('visible');
-      const form = modal.querySelector('form');
-      if (form) form.reset();
-      const err = modal.querySelector('.alert-error');
-      if (err) err.style.display = 'none';
-    }
-  }
+  window.openModal = openModal;
+  window.closeModal = closeModal;
 
   document.querySelectorAll('[data-close]').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -108,22 +268,22 @@
     });
   });
 
-  document.getElementById('openCreateExtModalBtn').addEventListener('click', () => {
+  addClick('openCreateExtModalBtn', () => {
     openModal('modalCreateExt');
     loadUnassignedAgentsDropdown();
     loadTfnsDropdown();
   });
 
-  document.getElementById('openCreateTfnModalBtn').addEventListener('click', () => {
+  addClick('openCreateTfnModalBtn', () => {
     openModal('modalCreateTfn');
     loadTrunksDropdown();
   });
 
-  document.getElementById('openCreateTrunkModalBtn').addEventListener('click', () => {
+  addClick('openCreateTrunkModalBtn', () => {
     openModal('modalCreateTrunk');
   });
 
-  document.getElementById('openCreateAgentModalBtn').addEventListener('click', () => {
+  addClick('openCreateAgentModalBtn', () => {
     openModal('modalCreateAgent');
   });
 
@@ -158,7 +318,7 @@
   }
 
   // ── Logout ──────────────────────────────────────
-  document.getElementById('adminLogoutBtn').addEventListener('click', async () => {
+  addClick('adminLogoutBtn', async () => {
     try {
       await fetch('/api/auth/logout', { method: 'POST', credentials: 'include', headers: getHeaders() });
     } catch { /* ignore */ }
@@ -173,20 +333,18 @@
       const res = await fetch('/api/admin/stats', { credentials: 'include', headers: getHeaders() });
       if (!res.ok) return;
       const stats = await res.json();
-      document.getElementById('statTotalAgents').textContent = stats.totalAgents || 0;
-      document.getElementById('statTotalExtensions').textContent = stats.totalExtensions || 0;
-      document.getElementById('statActiveChannels').textContent = stats.activeChannels || 0;
-      document.getElementById('statOnlineAgentsText').textContent = `${stats.onlineAgents || 0} Active now`;
-
-      document.getElementById('badgeExtCount').textContent = stats.totalExtensions || 0;
-      document.getElementById('badgeAgentCount').textContent = stats.totalAgents || 0;
+      setTxt('statTotalAgents', stats.totalAgents || 0);
+      setTxt('statTotalExtensions', stats.totalExtensions || 0);
+      setTxt('statActiveChannels', stats.activeChannels || 0);
+      setTxt('statOnlineAgentsText', `${stats.onlineAgents || 0} Active now`);
+      setTxt('badgeExtCount', stats.totalExtensions || 0);
+      setTxt('badgeAgentCount', stats.totalAgents || 0);
     } catch { /* ignore */ }
   }
 
   // ── Extensions Management ───────────────────────
   const extensionsTable = document.getElementById('extensionsTable');
   const searchExtensionsInput = document.getElementById('searchExtensionsInput');
-  const createExtError = document.getElementById('createExtError');
 
   async function loadExtensions() {
     try {
@@ -194,11 +352,58 @@
       if (!res.ok) return;
       allExtensions = await res.json();
       renderExtensions(allExtensions);
-      document.getElementById('badgeExtCount').textContent = allExtensions.length;
+      setTxt('badgeExtCount', allExtensions.length);
     } catch { /* ignore */ }
   }
 
   function renderExtensions(list) {
+    const gridEl = document.getElementById('extensionsGrid');
+    if (gridEl) {
+      if (list.length === 0) {
+        gridEl.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: var(--space-8);">No extensions found</div>';
+      } else {
+        gridEl.innerHTML = list.map((ext) => {
+          const agentName = ext.agent ? ext.agent.name : '— Unassigned —';
+          const tfnDisplay = ext.tfn ? ext.tfn.number : 'Default DID';
+          const regStatus = ext.liveRegistered || ext.registered;
+          const statusBadge = regStatus
+            ? '<span class="badge badge-success"><span class="status-dot online" style="margin-right:4px;"></span>Registered</span>'
+            : '<span class="badge badge-danger">Offline</span>';
+
+          return `
+            <div class="entity-card">
+              <div class="entity-card-header">
+                <div class="entity-card-title">
+                  <span>📞 Ext ${ext.number}</span>
+                </div>
+                ${statusBadge}
+              </div>
+              <div class="entity-card-body">
+                <div class="entity-card-row">
+                  <span class="entity-card-label">Assigned Agent</span>
+                  <span class="entity-card-value">${agentName}</span>
+                </div>
+                <div class="entity-card-row">
+                  <span class="entity-card-label">Outbound DID / TFN</span>
+                  <span class="entity-card-value" style="color: var(--accent-light);">${tfnDisplay}</span>
+                </div>
+                <div class="entity-card-row">
+                  <span class="entity-card-label">Receive Mode</span>
+                  <span class="badge badge-info">${ext.callsReceiveOn || 'Extension'}</span>
+                </div>
+              </div>
+              <div class="entity-card-actions">
+                <button class="btn btn-ghost" style="padding: 4px 10px; font-size: 12px; color: var(--accent-light); border: 1px solid rgba(99, 102, 241, 0.4);" onclick="window.viewSipCredentials('${ext.number}', '${ext.number}', '${ext.sipPassword || 'Agent@123'}', '${ext.tfn ? ext.tfn.number : ''}')">🔑 SIP Config</button>
+                <div style="display:flex; gap:6px;">
+                  <button class="btn btn-action-control" onclick="window.openSupervisorModal('${ext.id}')">⚙️ Control</button>
+                  <button class="btn btn-action-delete" onclick="window.adminDeleteExt('${ext.id}', '${ext.number}', this)">🗑️</button>
+                </div>
+              </div>
+            </div>`;
+        }).join('');
+      }
+    }
+
     if (!extensionsTable) return;
     if (list.length === 0) {
       extensionsTable.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: var(--space-8);">No extensions found</td></tr>';
@@ -230,10 +435,9 @@
           </td>
           <td>
             <div style="display: flex; gap: var(--space-2);">
-              <button class="btn btn-primary" style="font-size: var(--font-xs); padding: 4px 8px;"
-                onclick="window.openSupervisorModal('${ext.id}')">⚙️ Control</button>
-              <button class="btn btn-ghost" style="font-size: var(--font-xs); padding: 4px 8px; color: var(--danger);"
-                onclick="window.adminDeleteExt('${ext.id}', '${ext.number}')">Delete</button>
+              <button class="btn btn-ghost" style="padding: 4px 8px; font-size: 11px; color: var(--accent-light); border: 1px solid rgba(99, 102, 241, 0.4);" onclick="window.viewSipCredentials('${ext.number}', '${ext.number}', '${ext.sipPassword || 'Agent@123'}', '${ext.tfn ? ext.tfn.number : ''}')">🔑 SIP Config</button>
+              <button class="btn btn-action-control" onclick="window.openSupervisorModal('${ext.id}')">⚙️ Control</button>
+              <button class="btn btn-action-delete" onclick="window.adminDeleteExt('${ext.id}', '${ext.number}', this)">🗑️ Delete</button>
             </div>
           </td>
         </tr>`;
@@ -296,11 +500,17 @@
     }
   }
 
-  document.getElementById('submitCreateExtBtn').addEventListener('click', async () => {
-    const number = document.getElementById('newExtNumber').value.trim();
-    const sipPassword = document.getElementById('newExtPassword').value;
-    const agentId = document.getElementById('newExtAgent').value || undefined;
-    const tfnId = document.getElementById('newExtTfn').value || undefined;
+  addClick('submitCreateExtBtn', async () => {
+    const numberEl = document.getElementById('newExtNumber');
+    const passEl = document.getElementById('newExtPassword');
+    const agentEl = document.getElementById('newExtAgent');
+    const tfnEl = document.getElementById('newExtTfn');
+    const createExtError = document.getElementById('createExtError');
+
+    const number = numberEl ? numberEl.value.trim() : '';
+    const sipPassword = passEl ? passEl.value : '';
+    const agentId = agentEl && agentEl.value ? agentEl.value : undefined;
+    const tfnId = tfnEl && tfnEl.value ? tfnEl.value : undefined;
 
     if (!number || number.length < 3) {
       showError(createExtError, 'Extension number required (3-6 digits)');
@@ -341,101 +551,132 @@
     } catch { /* ignore */ }
   };
 
-  window.adminDeleteExt = async function (id, number) {
-    if (!confirm(`Delete extension ${number}?`)) return;
-    try {
-      await fetch(`/api/admin/extensions/${id}`, {
-        method: 'DELETE',
-        credentials: 'include',
-        headers: getHeaders(),
-      });
-      loadExtensions();
-      loadOverviewStats();
-    } catch { /* ignore */ }
+  window.adminDeleteExt = function (id, number, btnEl) {
+    showConfirmDialog({
+      title: 'Delete Extension',
+      message: `Are you sure you want to delete Extension <strong style="color: var(--accent-light); font-family: monospace;">${number}</strong>?`,
+      icon: '🗑️',
+      okText: 'Yes, Delete',
+      onConfirm: async () => {
+        const row = btnEl ? btnEl.closest('tr') : null;
+        if (row) row.style.opacity = '0.3';
+        try {
+          const res = await fetch(`/api/admin/extensions/${id}`, {
+            method: 'DELETE',
+            credentials: 'include',
+            headers: getHeaders(),
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            if (row) row.style.opacity = '1';
+            showToast(data.error || 'Failed to delete extension', 'error');
+            return;
+          }
+          showToast(`✓ Extension ${number} deleted successfully`, 'success');
+          await loadExtensions();
+          await loadOverviewStats();
+        } catch (err) {
+          if (row) row.style.opacity = '1';
+          showToast('Error deleting extension: ' + err.message, 'error');
+        }
+      },
+    });
   };
 
-  // ── Supervisor & Extension Control (Image 2) ─────
+  // ── Supervisor & Extension Control ───────────────
   let activeExtRecord = null;
-  const supExtId = document.getElementById('supExtId');
-  const supExtNumber = document.getElementById('supExtNumber');
-  const supExtPassword = document.getElementById('supExtPassword');
-  const supTogglePassBtn = document.getElementById('supTogglePassBtn');
-  const supCallerIdSelect = document.getElementById('supCallerIdSelect');
-  const supAccountNumbersList = document.getElementById('supAccountNumbersList');
-  const supMaxLocations = document.getElementById('supMaxLocations');
-  const supCallsReceiveOn = document.getElementById('supCallsReceiveOn');
-  const saveSupSettingsBtn = document.getElementById('saveSupSettingsBtn');
 
   window.openSupervisorModal = async function (extId) {
     const ext = allExtensions.find((e) => e.id === extId);
     if (!ext) return;
     activeExtRecord = ext;
 
-    supExtId.value = ext.id;
-    supExtNumber.value = ext.number;
-    supExtPassword.value = 'Ext' + ext.number + '@Sip';
-    supMaxLocations.value = ext.maxLoginLocations || 1;
-    supCallsReceiveOn.value = ext.callsReceiveOn || 'Extension';
+    const supExtId = document.getElementById('supExtId');
+    const supExtNumber = document.getElementById('supExtNumber');
+    const supExtPassword = document.getElementById('supExtPassword');
+    const supMaxLocations = document.getElementById('supMaxLocations');
+    const supCallsReceiveOn = document.getElementById('supCallsReceiveOn');
+    const supCallerIdSelect = document.getElementById('supCallerIdSelect');
 
-    // Populate Account Numbers Caller ID list
-    if (supAccountNumbersList) {
-      supAccountNumbersList.innerHTML = '';
+    if (supExtId) supExtId.value = ext.id;
+    if (supExtNumber) supExtNumber.value = ext.number;
+    if (supExtPassword) supExtPassword.value = 'Ext' + ext.number + '@Sip';
+    if (supMaxLocations) supMaxLocations.value = ext.maxLoginLocations || 1;
+    if (supCallsReceiveOn) supCallsReceiveOn.value = ext.callsReceiveOn || 'Extension';
+
+    if (supCallerIdSelect) {
+      supCallerIdSelect.innerHTML = '<option value="">— Default Trunk DID —</option>';
       allTfns.forEach((t) => {
         const opt = document.createElement('option');
         opt.value = t.id;
-        opt.textContent = t.number;
+        opt.textContent = `${t.number} (${t.label || 'TFN'})`;
         if (ext.tfnId === t.id) opt.selected = true;
-        supAccountNumbersList.appendChild(opt);
+        supCallerIdSelect.appendChild(opt);
       });
     }
 
     openModal('modalSupervisorExt');
   };
 
-  if (supTogglePassBtn) {
-    supTogglePassBtn.addEventListener('click', () => {
-      const isPass = supExtPassword.type === 'password';
-      supExtPassword.type = isPass ? 'text' : 'password';
-      supTogglePassBtn.textContent = isPass ? '🙈' : '👁';
-    });
-  }
-
-  document.getElementById('copyExtNumBtn').addEventListener('click', () => {
-    navigator.clipboard.writeText(supExtNumber.value);
-    alert(`Copied Extension ${supExtNumber.value} to clipboard!`);
+  addClick('supTogglePassBtn', () => {
+    const supExtPassword = document.getElementById('supExtPassword');
+    const supTogglePassBtn = document.getElementById('supTogglePassBtn');
+    if (!supExtPassword) return;
+    const isPass = supExtPassword.type === 'password';
+    supExtPassword.type = isPass ? 'text' : 'password';
+    if (supTogglePassBtn) supTogglePassBtn.textContent = isPass ? '🙈' : '👁';
   });
 
-  document.getElementById('copyExtPassBtn').addEventListener('click', () => {
-    navigator.clipboard.writeText(supExtPassword.value);
-    alert('Copied SIP Password to clipboard!');
+  addClick('copyExtNumBtn', () => {
+    const supExtNumber = document.getElementById('supExtNumber');
+    if (supExtNumber) {
+      navigator.clipboard.writeText(supExtNumber.value);
+      alert(`Copied Extension ${supExtNumber.value} to clipboard!`);
+    }
   });
 
-  if (saveSupSettingsBtn) {
-    saveSupSettingsBtn.addEventListener('click', async () => {
-      const id = supExtId.value;
-      const tfnId = supCallerIdSelect.value || null;
-      const maxLoginLocations = parseInt(supMaxLocations.value) || 1;
-      const callsReceiveOn = supCallsReceiveOn.value;
-      const sipPassword = supExtPassword.value;
+  addClick('copyExtPassBtn', () => {
+    const supExtPassword = document.getElementById('supExtPassword');
+    if (supExtPassword) {
+      navigator.clipboard.writeText(supExtPassword.value);
+      alert('Copied SIP Password to clipboard!');
+    }
+  });
 
-      try {
-        const res = await fetch(`/api/admin/extensions/${id}/settings`, {
-          method: 'PUT',
-          credentials: 'include',
-          headers: getHeaders(),
-          body: JSON.stringify({ tfnId, maxLoginLocations, callsReceiveOn, sipPassword }),
-        });
+  addClick('saveSupSettingsBtn', async () => {
+    const supExtId = document.getElementById('supExtId');
+    const supCallerIdSelect = document.getElementById('supCallerIdSelect');
+    const supMaxLocations = document.getElementById('supMaxLocations');
+    const supCallsReceiveOn = document.getElementById('supCallsReceiveOn');
+    const supExtPassword = document.getElementById('supExtPassword');
 
-        if (res.ok) {
-          alert('✓ Extension settings saved successfully!');
-          closeModal('modalSupervisorExt');
-          loadExtensions();
-        }
-      } catch (err) {
-        alert('Failed to update extension settings');
+    if (!supExtId) return;
+    const id = supExtId.value;
+    const tfnId = supCallerIdSelect ? supCallerIdSelect.value || null : null;
+    const maxLoginLocations = supMaxLocations ? parseInt(supMaxLocations.value) || 1 : 1;
+    const callsReceiveOn = supCallsReceiveOn ? supCallsReceiveOn.value : 'Extension';
+    const sipPassword = supExtPassword ? supExtPassword.value : '';
+
+    try {
+      const res = await fetch(`/api/admin/extensions/${id}/settings`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: getHeaders(),
+        body: JSON.stringify({ tfnId, maxLoginLocations, callsReceiveOn, sipPassword }),
+      });
+
+      if (res.ok) {
+        alert('✓ Extension settings saved successfully!');
+        closeModal('modalSupervisorExt');
+        loadExtensions();
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Failed to update extension settings');
       }
-    });
-  }
+    } catch (err) {
+      alert('Failed to update extension settings: ' + err.message);
+    }
+  });
 
   window.runSupervisorAction = async function (action) {
     if (!activeExtRecord) return;
@@ -457,7 +698,7 @@
     window.open('/dashboard', '_blank');
   };
 
-  // ── CDR (Call Detail Records) Report (Image 1) ──
+  // ── CDR Report ──────────────────────────────────
   const cdrDateFrom = document.getElementById('cdrDateFrom');
   const cdrDateTo = document.getElementById('cdrDateTo');
   const cdrResponse = document.getElementById('cdrResponse');
@@ -466,12 +707,8 @@
   const cdrDestination = document.getElementById('cdrDestination');
   const cdrDirection = document.getElementById('cdrDirection');
   const cdrLimit = document.getElementById('cdrLimit');
-  const cdrFilterBtn = document.getElementById('cdrFilterBtn');
-  const cdrDownloadCsvBtn = document.getElementById('cdrDownloadCsvBtn');
-  const cdrResultsCount = document.getElementById('cdrResultsCount');
   const cdrTableBody = document.getElementById('cdrTableBody');
 
-  // Set default date range (yesterday to today)
   const now = new Date();
   const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
   if (cdrDateFrom && !cdrDateFrom.value) {
@@ -515,8 +752,7 @@
       if (!res.ok) return;
       const data = await res.json();
 
-      if (cdrResultsCount) cdrResultsCount.textContent = `Results found: ${data.resultsFound || 0}`;
-
+      setTxt('cdrResultsCount', `Results found: ${data.resultsFound || 0}`);
       renderCdrTable(data.logs || []);
     } catch { /* ignore */ }
   }
@@ -557,22 +793,17 @@
     }).join('');
   }
 
-  if (cdrFilterBtn) {
-    cdrFilterBtn.addEventListener('click', () => {
-      loadCdrReport();
-    });
-  }
+  addClick('cdrFilterBtn', () => {
+    loadCdrReport();
+  });
 
-  if (cdrDownloadCsvBtn) {
-    cdrDownloadCsvBtn.addEventListener('click', () => {
-      window.open('/api/admin/cdr/export', '_blank');
-    });
-  }
+  addClick('cdrDownloadCsvBtn', () => {
+    window.open('/api/admin/cdr/export', '_blank');
+  });
 
   // ── TFNs & DIDs Management ──────────────────────
   const tfnsTable = document.getElementById('tfnsTable');
   const searchTfnsInput = document.getElementById('searchTfnsInput');
-  const createTfnError = document.getElementById('createTfnError');
 
   async function loadTfns() {
     try {
@@ -580,11 +811,52 @@
       if (!res.ok) return;
       allTfns = await res.json();
       renderTfns(allTfns);
-      document.getElementById('badgeTfnCount').textContent = allTfns.length;
+      setTxt('badgeTfnCount', allTfns.length);
     } catch { /* ignore */ }
   }
 
   function renderTfns(list) {
+    const tfnsGridEl = document.getElementById('tfnsGrid');
+    if (tfnsGridEl) {
+      if (list.length === 0) {
+        tfnsGridEl.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: var(--space-8);">No Toll-Free / DID numbers configured</div>';
+      } else {
+        tfnsGridEl.innerHTML = list.map((tfn) => {
+          const trunkLabel = tfn.trunk ? tfn.trunk.name : 'Default';
+          const extList = tfn.extensions.map((e) => `Ext ${e.number}`).join(', ') || 'Unassigned';
+          const agentList = tfn.extensions.map((e) => e.agent ? e.agent.name : '—').join(', ') || '—';
+
+          return `
+            <div class="entity-card">
+              <div class="entity-card-header">
+                <div class="entity-card-title">
+                  <span>📞 ${tfn.number}</span>
+                </div>
+                <span class="badge badge-purple">${trunkLabel}</span>
+              </div>
+              <div class="entity-card-body">
+                <div class="entity-card-row">
+                  <span class="entity-card-label">Campaign Label</span>
+                  <span class="entity-card-value">${tfn.label || 'Toll-Free Helpline'}</span>
+                </div>
+                <div class="entity-card-row">
+                  <span class="entity-card-label">Assigned Extensions</span>
+                  <span class="entity-card-value" style="color: var(--accent-light);">${extList}</span>
+                </div>
+                <div class="entity-card-row">
+                  <span class="entity-card-label">Assigned Agents</span>
+                  <span class="entity-card-value">${agentList}</span>
+                </div>
+              </div>
+              <div class="entity-card-actions">
+                <span style="font-size: 11px; color: var(--text-muted);">Active DID</span>
+                <button class="btn btn-action-delete" onclick="window.adminDeleteTfn('${tfn.id}', '${tfn.number}', this)">🗑️ Delete</button>
+              </div>
+            </div>`;
+        }).join('');
+      }
+    }
+
     if (!tfnsTable) return;
     if (list.length === 0) {
       tfnsTable.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: var(--space-8);">No Toll-Free / DID numbers configured</td></tr>';
@@ -604,8 +876,7 @@
           <td>${extList}</td>
           <td>${agentList}</td>
           <td>
-            <button class="btn btn-ghost" style="font-size: var(--font-xs); padding: 4px 8px; color: var(--danger);"
-              onclick="window.adminDeleteTfn('${tfn.id}', '${tfn.number}')">Delete</button>
+            <button class="btn btn-action-delete" onclick="window.adminDeleteTfn('${tfn.id}', '${tfn.number}', this)">🗑️ Delete</button>
           </td>
         </tr>`;
     }).join('');
@@ -623,10 +894,15 @@
     });
   }
 
-  document.getElementById('submitCreateTfnBtn').addEventListener('click', async () => {
-    const number = document.getElementById('newTfnNumber').value.trim();
-    const label = document.getElementById('newTfnLabel').value.trim();
-    const trunkId = document.getElementById('newTfnTrunk').value || undefined;
+  addClick('submitCreateTfnBtn', async () => {
+    const numberEl = document.getElementById('newTfnNumber');
+    const labelEl = document.getElementById('newTfnLabel');
+    const trunkEl = document.getElementById('newTfnTrunk');
+    const createTfnError = document.getElementById('createTfnError');
+
+    const number = numberEl ? numberEl.value.trim() : '';
+    const label = labelEl ? labelEl.value.trim() : '';
+    const trunkId = trunkEl && trunkEl.value ? trunkEl.value : undefined;
 
     if (!number) {
       showError(createTfnError, 'Phone number is required (e.g. +18005550199)');
@@ -645,6 +921,7 @@
       if (!res.ok) throw new Error(data.error || 'Failed to add TFN');
 
       closeModal('modalCreateTfn');
+      showToast(`✓ TFN ${number} added successfully`, 'success');
       await loadTfns();
       await loadTfnsDropdown();
       await loadTrunks();
@@ -653,25 +930,43 @@
     }
   });
 
-  window.adminDeleteTfn = async function (id, number) {
-    if (!confirm(`Delete TFN ${number}?`)) return;
-    try {
-      await fetch(`/api/admin/tfns/${id}`, {
-        method: 'DELETE',
-        credentials: 'include',
-        headers: getHeaders(),
-      });
-      await loadTfns();
-      await loadTfnsDropdown();
-      await loadExtensions();
-      await loadTrunks();
-    } catch { /* ignore */ }
+  window.adminDeleteTfn = function (id, number, btnEl) {
+    showConfirmDialog({
+      title: 'Delete Toll-Free Number',
+      message: `Are you sure you want to delete TFN <strong style="color: var(--accent-light); font-family: monospace;">${number}</strong>?`,
+      icon: '📞',
+      okText: 'Yes, Delete TFN',
+      onConfirm: async () => {
+        const row = btnEl ? btnEl.closest('tr') : null;
+        if (row) row.style.opacity = '0.3';
+        try {
+          const res = await fetch(`/api/admin/tfns/${id}`, {
+            method: 'DELETE',
+            credentials: 'include',
+            headers: getHeaders(),
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            if (row) row.style.opacity = '1';
+            showToast(data.error || 'Failed to delete TFN', 'error');
+            return;
+          }
+          showToast(`✓ TFN ${number} deleted successfully`, 'success');
+          await loadTfns();
+          await loadTfnsDropdown();
+          await loadExtensions();
+          await loadTrunks();
+        } catch (err) {
+          if (row) row.style.opacity = '1';
+          showToast('Error deleting TFN: ' + err.message, 'error');
+        }
+      },
+    });
   };
 
   // ── Multi-SIP Trunk Management ──────────────────
   const trunksTable = document.getElementById('trunksTable');
   const searchTrunksInput = document.getElementById('searchTrunksInput');
-  const createTrunkError = document.getElementById('createTrunkError');
 
   async function loadTrunks() {
     try {
@@ -680,11 +975,61 @@
       allTrunks = await res.json();
       renderTrunks(allTrunks);
       renderOverviewTrunks(allTrunks);
-      document.getElementById('badgeTrunkCount').textContent = allTrunks.length;
+      setTxt('badgeTrunkCount', allTrunks.length);
     } catch { /* ignore */ }
   }
 
   function renderTrunks(list) {
+    const trunksGridEl = document.getElementById('trunksGrid');
+    if (trunksGridEl) {
+      if (list.length === 0) {
+        trunksGridEl.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: var(--space-8);">No SIP Trunks configured.</div>';
+      } else {
+        trunksGridEl.innerHTML = list.map((t) => {
+          const providerIcon = t.provider === 'telnyx' ? '🟣 Telnyx' :
+            t.provider === 'twilio' ? '🔴 Twilio' :
+            t.provider === 'voipms' ? '🔵 VoIP.ms' :
+            t.provider === 'bandwidth' ? '🟢 Bandwidth' : '🌐 Generic / Airtel';
+          const isReged = t.registered || t.liveStatus === 'REGED';
+          const statusBadge = isReged
+            ? '<span class="badge badge-success"><span class="status-dot online" style="margin-right:4px;"></span>Connected</span>'
+            : `<span class="badge badge-danger">${t.liveStatus || 'Offline'}</span>`;
+
+          return `
+            <div class="entity-card">
+              <div class="entity-card-header">
+                <div class="entity-card-title">
+                  <span>${t.name}</span>
+                </div>
+                <span class="badge badge-info">${providerIcon}</span>
+              </div>
+              <div class="entity-card-body">
+                <div class="entity-card-row">
+                  <span class="entity-card-label">Gateway Host & Port</span>
+                  <span class="entity-card-value">${t.host}:${t.port || 5060}</span>
+                </div>
+                <div class="entity-card-row">
+                  <span class="entity-card-label">Username</span>
+                  <span class="entity-card-value">${t.username || '—'}</span>
+                </div>
+                <div class="entity-card-row">
+                  <span class="entity-card-label">Default Outbound DID</span>
+                  <span class="entity-card-value" style="color: var(--accent-light);">${t.didNumber || '—'}</span>
+                </div>
+                <div class="entity-card-row">
+                  <span class="entity-card-label">Registration State</span>
+                  ${statusBadge}
+                </div>
+              </div>
+              <div class="entity-card-actions">
+                <button class="btn btn-action-control" onclick="window.adminTestTrunk('${t.id}', '${t.name}')">⚡ Test</button>
+                <button class="btn btn-action-delete" onclick="window.adminDeleteTrunk('${t.id}', '${t.name}', this)">🗑️ Delete</button>
+              </div>
+            </div>`;
+        }).join('');
+      }
+    }
+
     if (!trunksTable) return;
     if (list.length === 0) {
       trunksTable.innerHTML = '<tr><td colspan="9" style="text-align: center; color: var(--text-muted); padding: var(--space-8);">No SIP Trunks configured.</td></tr>';
@@ -723,10 +1068,8 @@
           </td>
           <td>
             <div style="display: flex; gap: var(--space-2);">
-              <button class="btn btn-ghost" style="font-size: var(--font-xs); padding: 4px 8px;"
-                onclick="window.adminTestTrunk('${t.id}', '${t.name}')">Test</button>
-              <button class="btn btn-ghost" style="font-size: var(--font-xs); padding: 4px 8px; color: var(--danger);"
-                onclick="window.adminDeleteTrunk('${t.id}', '${t.name}')">Delete</button>
+              <button class="btn btn-action-control" onclick="window.adminTestTrunk('${t.id}', '${t.name}')">⚡ Test</button>
+              <button class="btn btn-action-delete" onclick="window.adminDeleteTrunk('${t.id}', '${t.name}', this)">🗑️ Delete</button>
             </div>
           </td>
         </tr>`;
@@ -747,12 +1090,12 @@
       const badgeText = isReged ? 'Connected' : 'Offline';
 
       return `
-        <div style="display: flex; justify-content: space-between; align-items: center; padding: var(--space-2) 0; border-bottom: 1px solid var(--border-subtle);">
-          <div>
-            <strong style="font-size: var(--font-xs);">${t.name}</strong>
-            <div style="font-size: 10px; color: var(--text-muted); font-family: monospace;">${t.host}</div>
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: var(--space-2) 0; border-bottom: 1px solid var(--border-subtle); gap: 8px;">
+          <div style="min-width: 0; flex: 1;">
+            <strong style="font-size: var(--font-xs); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${t.name}</strong>
+            <div style="font-size: 10px; color: var(--text-muted); font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${t.host}</div>
           </div>
-          <span class="badge ${badgeClass}" style="font-size: 10px;">${badgeText}</span>
+          <span class="badge ${badgeClass}" style="font-size: 10px; flex-shrink: 0;">${badgeText}</span>
         </div>`;
     }).join('');
   }
@@ -769,14 +1112,23 @@
     });
   }
 
-  document.getElementById('submitCreateTrunkBtn').addEventListener('click', async () => {
-    const provider = document.getElementById('newTrunkProvider').value;
-    const name = document.getElementById('newTrunkName').value.trim();
-    const host = document.getElementById('newTrunkHost').value.trim();
-    const port = parseInt(document.getElementById('newTrunkPort').value) || 5060;
-    const username = document.getElementById('newTrunkUsername').value.trim();
-    const password = document.getElementById('newTrunkPassword').value;
-    const didNumber = document.getElementById('newTrunkDid').value.trim();
+  addClick('submitCreateTrunkBtn', async () => {
+    const providerEl = document.getElementById('newTrunkProvider');
+    const nameEl = document.getElementById('newTrunkName');
+    const hostEl = document.getElementById('newTrunkHost');
+    const portEl = document.getElementById('newTrunkPort');
+    const usernameEl = document.getElementById('newTrunkUsername');
+    const passwordEl = document.getElementById('newTrunkPassword');
+    const didEl = document.getElementById('newTrunkDid');
+    const createTrunkError = document.getElementById('createTrunkError');
+
+    const provider = providerEl ? providerEl.value : 'telnyx';
+    const name = nameEl ? nameEl.value.trim() : '';
+    const host = hostEl ? hostEl.value.trim() : '';
+    const port = portEl ? parseInt(portEl.value) || 5060 : 5060;
+    const username = usernameEl ? usernameEl.value.trim() : '';
+    const password = passwordEl ? passwordEl.value : '';
+    const didNumber = didEl ? didEl.value.trim() : '';
 
     if (!name) {
       showError(createTrunkError, 'Trunk Name / Label is required');
@@ -803,6 +1155,7 @@
       if (!res.ok) throw new Error(data.error || 'Failed to create SIP trunk');
 
       closeModal('modalCreateTrunk');
+      showToast(`✓ SIP Trunk "${name}" added successfully`, 'success');
       await loadTrunks();
       await loadTrunksDropdown();
     } catch (err) {
@@ -810,18 +1163,37 @@
     }
   });
 
-  window.adminDeleteTrunk = async function (id, name) {
-    if (!confirm(`Delete SIP Trunk "${name}"?`)) return;
-    try {
-      await fetch(`/api/admin/trunks/${id}`, {
-        method: 'DELETE',
-        credentials: 'include',
-        headers: getHeaders(),
-      });
-      await loadTrunks();
-      await loadTrunksDropdown();
-      await loadTfns();
-    } catch { /* ignore */ }
+  window.adminDeleteTrunk = function (id, name, btnEl) {
+    showConfirmDialog({
+      title: 'Delete SIP Trunk',
+      message: `Are you sure you want to delete SIP Trunk <strong style="color: var(--accent-light); font-family: monospace;">"${name}"</strong>?`,
+      icon: '🌐',
+      okText: 'Yes, Delete Trunk',
+      onConfirm: async () => {
+        const row = btnEl ? btnEl.closest('tr') : null;
+        if (row) row.style.opacity = '0.3';
+        try {
+          const res = await fetch(`/api/admin/trunks/${id}`, {
+            method: 'DELETE',
+            credentials: 'include',
+            headers: getHeaders(),
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            if (row) row.style.opacity = '1';
+            showToast(data.error || 'Failed to delete SIP trunk', 'error');
+            return;
+          }
+          showToast(`✓ SIP Trunk "${name}" deleted successfully`, 'success');
+          await loadTrunks();
+          await loadTrunksDropdown();
+          await loadTfns();
+        } catch (err) {
+          if (row) row.style.opacity = '1';
+          showToast('Error deleting SIP trunk: ' + err.message, 'error');
+        }
+      },
+    });
   };
 
   window.adminToggleTrunk = async function (id, enabled) {
@@ -855,13 +1227,12 @@
     const select = document.getElementById('newTfnTrunk');
     if (!select) return;
 
-    // Try to fetch fresh data, fallback to cached allTrunks
     let trunks = allTrunks;
     try {
       const res = await fetch('/api/admin/trunks', { credentials: 'include', headers: getHeaders() });
       if (res.ok) {
         trunks = await res.json();
-        allTrunks = trunks; // Update cache
+        allTrunks = trunks;
       }
     } catch { /* use cached allTrunks */ }
 
@@ -880,7 +1251,6 @@
   // ── Agents Management ───────────────────────────
   const agentsTable = document.getElementById('agentsTable');
   const searchAgentsInput = document.getElementById('searchAgentsInput');
-  const createAgentError = document.getElementById('createAgentError');
 
   async function loadAgents() {
     try {
@@ -888,11 +1258,55 @@
       if (!res.ok) return;
       allAgents = await res.json();
       renderAgents(allAgents);
-      document.getElementById('badgeAgentCount').textContent = allAgents.length;
+      setTxt('badgeAgentCount', allAgents.length);
     } catch { /* ignore */ }
   }
 
   function renderAgents(list) {
+    const agentsGridEl = document.getElementById('agentsGrid');
+    if (agentsGridEl) {
+      if (list.length === 0) {
+        agentsGridEl.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: var(--space-8);">No agents found</div>';
+      } else {
+        agentsGridEl.innerHTML = list.map((agent) => {
+          const extNum = agent.extension ? `Ext ${agent.extension.number}` : '—';
+          const statusClass = agent.status === 'ONLINE' ? 'badge-success' :
+            agent.status === 'IN_CALL' ? 'badge-info' :
+            agent.status === 'RINGING' ? 'badge-warning' : 'badge-danger';
+          const rawExtNumber = agent.extension ? agent.extension.number : '1001';
+
+          return `
+            <div class="entity-card">
+              <div class="entity-card-header">
+                <div class="entity-card-title">
+                  <span class="agent-avatar-sm">${agent.name.charAt(0)}</span>
+                  <span>${agent.name}</span>
+                </div>
+                <span class="badge ${statusClass}">${agent.status}</span>
+              </div>
+              <div class="entity-card-body">
+                <div class="entity-card-row">
+                  <span class="entity-card-label">Email Address</span>
+                  <span class="entity-card-value" style="font-size: 11px;">${agent.email}</span>
+                </div>
+                <div class="entity-card-row">
+                  <span class="entity-card-label">Assigned Extension</span>
+                  <span class="entity-card-value" style="color: var(--accent-light);">${extNum}</span>
+                </div>
+                <div class="entity-card-row">
+                  <span class="entity-card-label">System Role</span>
+                  <span class="badge ${agent.role === 'admin' ? 'badge-warning' : 'badge-info'}">${agent.role}</span>
+                </div>
+              </div>
+              <div class="entity-card-actions">
+                <button class="btn btn-ghost" style="padding: 4px 10px; font-size: 12px; color: var(--accent-light); border: 1px solid rgba(99, 102, 241, 0.4);" onclick="window.viewSipCredentials('${rawExtNumber}', '${rawExtNumber}', 'Agent@123', '')">🔑 SIP Config</button>
+                ${agent.role === 'admin' ? '<span class="badge badge-warning" style="font-size: 10px;">🔒 Admin</span>' : `<button class="btn btn-action-delete" onclick="window.adminDeleteAgent('${agent.id}', '${agent.name}', this)">🗑️ Delete</button>`}
+              </div>
+            </div>`;
+        }).join('');
+      }
+    }
+
     if (!agentsTable) return;
     if (list.length === 0) {
       agentsTable.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: var(--space-8);">No agents found</td></tr>';
@@ -906,10 +1320,12 @@
         agent.status === 'RINGING' ? 'badge-warning' : 'badge-danger';
 
       const isAdmin = agent.role === 'admin';
+      const rawExtNumber = agent.extension ? agent.extension.number : '1001';
+      const sipBtn = `<button class="btn btn-ghost" style="padding: 4px 8px; font-size: 11px; color: var(--accent-light); border: 1px solid rgba(99, 102, 241, 0.4);" onclick="window.viewSipCredentials('${rawExtNumber}', '${rawExtNumber}', 'Agent@123', '')">🔑 SIP Config</button>`;
+
       const actionBtn = isAdmin
-        ? '<span class="badge badge-warning" style="font-size: 10px;">🔒 Protected Admin</span>'
-        : `<button class="btn btn-ghost" style="font-size: var(--font-xs); padding: 4px 8px; color: var(--danger);"
-            onclick="window.adminDeleteAgent('${agent.id}', '${agent.name}')">Delete</button>`;
+        ? `<div style="display: flex; align-items: center; gap: 6px;">${sipBtn} <span class="badge badge-warning" style="font-size: 10px;">🔒 Admin</span></div>`
+        : `<div style="display: flex; gap: 6px;">${sipBtn} <button class="btn btn-action-delete" onclick="window.adminDeleteAgent('${agent.id}', '${agent.name}', this)">🗑️ Delete</button></div>`;
 
       return `
         <tr>
@@ -946,11 +1362,17 @@
     });
   }
 
-  document.getElementById('submitCreateAgentBtn').addEventListener('click', async () => {
-    const name = document.getElementById('newAgentName').value.trim();
-    const email = document.getElementById('newAgentEmail').value.trim();
-    const password = document.getElementById('newAgentPassword').value;
-    const role = document.getElementById('newAgentRole').value;
+  addClick('submitCreateAgentBtn', async () => {
+    const nameEl = document.getElementById('newAgentName');
+    const emailEl = document.getElementById('newAgentEmail');
+    const passwordEl = document.getElementById('newAgentPassword');
+    const roleEl = document.getElementById('newAgentRole');
+    const createAgentError = document.getElementById('createAgentError');
+
+    const name = nameEl ? nameEl.value.trim() : '';
+    const email = emailEl ? emailEl.value.trim() : '';
+    const password = passwordEl ? passwordEl.value : '';
+    const role = roleEl ? roleEl.value : 'agent';
 
     if (!name || name.length < 2) {
       showError(createAgentError, 'Name required (min 2 chars)');
@@ -977,6 +1399,7 @@
       if (!res.ok) throw new Error(data.error || 'Failed to create agent');
 
       closeModal('modalCreateAgent');
+      showToast(`✓ Agent "${name}" created successfully`, 'success');
       loadAgents();
       loadOverviewStats();
     } catch (err) {
@@ -995,34 +1418,75 @@
     } catch { /* ignore */ }
   };
 
-  window.adminDeleteAgent = async function (id, name) {
-    if (!confirm(`Delete agent account ${name}?`)) return;
-    try {
-      const res = await fetch(`/api/admin/agents/${id}`, {
-        method: 'DELETE',
-        credentials: 'include',
-        headers: getHeaders(),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        alert(data.error || 'Cannot delete agent');
-        return;
-      }
-      loadAgents();
-      loadOverviewStats();
-    } catch { /* ignore */ }
+  window.adminDeleteAgent = function (id, name, btnEl) {
+    showConfirmDialog({
+      title: 'Delete Agent Account',
+      message: `Are you sure you want to delete Agent account <strong style="color: var(--accent-light); font-family: monospace;">"${name}"</strong>?`,
+      icon: '👤',
+      okText: 'Yes, Delete Account',
+      onConfirm: async () => {
+        const row = btnEl ? btnEl.closest('tr') : null;
+        if (row) row.style.opacity = '0.3';
+        try {
+          const res = await fetch(`/api/admin/agents/${id}`, {
+            method: 'DELETE',
+            credentials: 'include',
+            headers: getHeaders(),
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            if (row) row.style.opacity = '1';
+            showToast(data.error || 'Cannot delete agent', 'error');
+            return;
+          }
+          showToast(`✓ Agent "${name}" deleted successfully`, 'success');
+          loadAgents();
+          loadOverviewStats();
+        } catch (err) {
+          if (row) row.style.opacity = '1';
+          showToast('Error deleting agent: ' + err.message, 'error');
+        }
+      },
+    });
   };
 
-  // ── Helpers ─────────────────────────────────────
-  function showError(el, msg) {
-    el.textContent = msg;
-    el.style.display = 'block';
-  }
+  // ── SIP Configuration & Credentials Inspector ──
+  window.viewSipCredentials = function (extNumber, sipUser, sipPass, tfnNumber) {
+    const host = window.location.hostname || '7xvoip.com';
+    const domain = host.includes('localhost') ? '7xvoip.com' : host;
+    const wssUrl = `wss://${domain}:7443`;
+
+    setTxt('sipCredExt', `Extension ${extNumber}`);
+    setTxt('sipCredUser', sipUser || extNumber);
+    setTxt('sipCredPass', sipPass || 'Agent@123');
+    setTxt('sipCredDomain', domain);
+    setTxt('sipCredWss', wssUrl);
+    setTxt('sipCredTfn', tfnNumber || 'Default System DID (+18005550199)');
+
+    openModal('modalSipCredentials');
+  };
+
+  window.copySipCredentials = function () {
+    const ext = getTxt('sipCredExt');
+    const user = getTxt('sipCredUser');
+    const pass = getTxt('sipCredPass');
+    const domain = getTxt('sipCredDomain');
+    const wss = getTxt('sipCredWss');
+    const tfn = getTxt('sipCredTfn');
+
+    const text = `7XVOIP SIP Credentials:\nAccount: ${ext}\nSIP Username: ${user}\nSIP Password: ${pass}\nDomain/Realm: ${domain}\nWebRTC WSS: ${wss}\nOutbound TFN: ${tfn}`;
+
+    navigator.clipboard.writeText(text).then(() => {
+      showToast('✓ SIP Credentials copied to clipboard!', 'success');
+    }).catch(() => {
+      showToast('SIP Credentials ready', 'info');
+    });
+  };
 
   // ── Initialization & Session Check ──────────────
   async function init() {
-    let agentData = JSON.parse(sessionStorage.getItem('agent') || 'null');
-    const token = sessionStorage.getItem('authToken');
+    let agentData = JSON.parse(localStorage.getItem('agent') || sessionStorage.getItem('agent') || 'null');
+    let token = localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
 
     if (!agentData || !token) {
       try {
@@ -1031,7 +1495,13 @@
           const data = await res.json();
           if (data.agent) {
             agentData = data.agent;
+            token = data.token || token;
+            localStorage.setItem('agent', JSON.stringify(agentData));
             sessionStorage.setItem('agent', JSON.stringify(agentData));
+            if (data.token) {
+              localStorage.setItem('authToken', data.token);
+              sessionStorage.setItem('authToken', data.token);
+            }
           }
         }
       } catch { /* ignore */ }

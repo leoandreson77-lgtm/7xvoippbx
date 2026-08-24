@@ -1,15 +1,86 @@
-<!--
-  FreeSWITCH Event Socket Configuration (Docker Container)
-  
-  Allows the Node.js backend container to connect via ESL.
-  Listens on 0.0.0.0 to accept connections from the Docker bridge network.
--->
 <configuration name="event_socket.conf" description="Socket Client">
   <settings>
     <param name="nat-map" value="false"/>
     <param name="listen-ip" value="0.0.0.0"/>
     <param name="listen-port" value="8021"/>
+    New Conversation Started
+    6:43 PM
+    Look at the log line: mod_event_socket.c:2674 IP 172.16.1.7 Rejected by acl "loopback.auto"
+    
+    mod_event_socket loopback.auto ACL check kar raha hai, jo sirf local 127.0.0.1 ko allow karta hai.
+    Isse lan.auto (jo saare Docker 172.16.x.x subnets ko allow karta hai) par switch karne ke liye VPS terminal me yeh 1-click command run karein:
+    
+    bash
+    docker exec freeswitch_live sed -i 's/loopback.auto/lan.auto/g' /etc/freeswitch/autoload_configs/event_socket.conf.xml
+    docker exec freeswitch_live sed -i 's/any_custom.auto/lan.auto/g' /etc/freeswitch/autoload_configs/event_socket.conf.xml
+    docker exec freeswitch_live sed -i 's/loopback.auto/lan.auto/g' /usr/share/freeswitch/conf/vanilla/autoload_configs/event_socket.conf.xml
+    docker exec freeswitch_live sed -i 's/any_custom.auto/lan.auto/g' /usr/share/freeswitch/conf/vanilla/autoload_configs/event_socket.conf.xml
+    docker exec freeswitch_live fs_cli -p ClueCon -x "reload mod_event_socket"
+    Node App Check Karein:
+    bash
+    docker logs $(docker ps | grep -i 7xvoipbx | awk '{print $1}') --tail 10
+    Wahan ✓ Connected to FreeSWITCH ESL instant print ho jayega! 🚀
+    
+    6:43 PM
+    6:44 PM
+    FreeSWITCH ke logs me check karein ab 172.16.1.7 (Node app) accept hua ya nahi:
+    
+    bash
+    docker logs freeswitch_live --tail 10
+    Iska output paste karein! 🔍
+    
+    6:44 PM
+    6:45 PM
+    Aapka sed command string quotes ki wajah se skip ho gaya tha.
+    
+    Isko 100% cleanly fix karne ke liye (python se fresh 8-line config generate karke) VPS terminal me yeh 2 commands run karein:
+    
+    bash
+    docker exec freeswitch_live python3 -c "
+    with open('/etc/freeswitch/autoload_configs/event_socket.conf.xml', 'w') as f:
+        f.write('''<configuration name=\"event_socket.conf\" description=\"Socket Client\">
+      <settings>
+        <param name=\"nat-map\" value=\"false\"/>
+        <param name=\"listen-ip\" value=\"0.0.0.0\"/>
+        <param name=\"listen-port\" value=\"8021\"/>
+        <param name=\"password\" value=\"ClueCon\"/>
+      </settings>
+    </configuration>''')
+    "
+    docker restart freeswitch_live
+    Node App Check Karein:
+    bash
+    docker restart $(docker ps | grep -i 7xvoipbx | awk '{print $1}')
+    docker logs $(docker ps | grep -i 7xvoipbx | awk '{print $1}') --tail 10
+    Wahan ✓ Connected to FreeSWITCH ESL 100% instant print ho jayega! 🚀
+    
+    6:45 PM
+    6:46 PM
+    Container me Python install nahi hai, isliye printf se cleanly overwrite karenge:
+    
+    VPS terminal me yeh 2 commands run karein:
+    
+    bash
+    docker exec freeswitch_live sh -c 'printf "<configuration name=\"event_socket.conf\" description=\"Socket Client\">\n  <settings>\n    <param name=\"nat-map\" value=\"false\"/>\n    <param name=\"listen-ip\" value=\"0.0.0.0\"/>\n    <param name=\"listen-port\" value=\"8021\"/>\n    <param name=\"password\" value=\"ClueCon\"/>\n  </settings>\n</configuration>\n" > /etc/freeswitch/autoload_configs/event_socket.conf.xml'
+    docker restart freeswitch_live
+    Node App Check Karein:
+    bash
+    docker restart $(docker ps | grep -i 7xvoipbx | awk '{print $1}')
+    docker logs $(docker ps | grep -i 7xvoipbx | awk '{print $1}') --tail 10
+    Wahan ✓ Connected to FreeSWITCH ESL instant print ho jayega! 🚀
+    
+    6:46 PM
+    6:46 PM
+    Prisma database sync ho raha hai! 🔄
+    
+    5 seconds wait karke logs run karein:
+    
+    bash
+    docker logs $(docker ps | grep -i 7xvoipbx | awk '{print $1}') --tail 15
+    Iska output paste karein! 🚀
+    
+    6:46 PM
+    
     <param name="password" value="ClueCon"/>
-    <param name="apply-inbound-acl" value="any_custom.auto"/>
   </settings>
 </configuration>

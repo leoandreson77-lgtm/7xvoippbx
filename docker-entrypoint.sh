@@ -7,18 +7,18 @@ mkdir -p /app/data 2>/dev/null || true
 
 # Default DATABASE_URL if not provided
 if [ -z "$DATABASE_URL" ]; then
-  export DATABASE_URL="file:/app/data/app.db"
+  export DATABASE_URL="postgresql://postgres:postgres@postgres:5432/7xvoip?schema=public"
 fi
 
 FS_HOST="${FREESWITCH_HOST:-${ESL_HOST:-}}"
 FS_PORT="${FREESWITCH_PORT:-${ESL_PORT:-8021}}"
 
 echo "=================================================="
-echo "  KRAD Global PBX & Call Center System (Docker)"
+echo "  7XVOIP PBX & Call Center System (Docker)"
 echo "=================================================="
 echo "  Environment:   ${NODE_ENV:-production}"
 echo "  Database URL:  ${DATABASE_URL}"
-echo "  SIP Domain:    ${SIP_DOMAIN:-kradglobal.com}"
+echo "  SIP Domain:    ${SIP_DOMAIN:-7xvoip.com}"
 if [ -n "$FS_HOST" ]; then
   echo "  ESL Target:    ${FS_HOST}:${FS_PORT}"
 else

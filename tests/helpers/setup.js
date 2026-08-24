@@ -12,7 +12,7 @@ async function createTestAgent(overrides = {}) {
   const passwordHash = await bcrypt.hash(password, 10);
   const extNumber = overrides.extension || `9${Math.floor(Math.random() * 900 + 100)}`;
   const sipPassword = `SipPass@${extNumber}`;
-  const realm = 'kradglobal.com';
+  const realm = '7xvoip.com';
 
   const agent = await prisma.agent.create({
     data: {

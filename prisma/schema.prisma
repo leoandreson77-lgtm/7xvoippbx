@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -28,7 +28,7 @@ model Extension {
   sipUsername       String     @unique
   sipPasswordHash  String // bcrypt hash for app-level validation
   sipHa1           String // MD5(user:realm:password) for SIP digest auth
-  realm            String     @default("kradglobal.com")
+  realm            String     @default("7xvoip.com")
   agentId          String?    @unique
   agent            Agent?     @relation(fields: [agentId], references: [id])
   tfnId            String?
@@ -88,6 +88,11 @@ model CallLog {
   endedAt      DateTime?
   callUuid     String?   @unique // FreeSWITCH call UUID
   createdAt    DateTime  @default(now())
+
+  @@index([startedAt])
+  @@index([extensionId])
+  @@index([status])
+  @@index([direction])
 }
 
 model AuditLog {
@@ -98,4 +103,7 @@ model AuditLog {
   details   String?
   ip        String?
   createdAt DateTime @default(now())
+
+  @@index([agentId])
+  @@index([createdAt])
 }

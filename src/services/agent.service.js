@@ -87,7 +87,7 @@ async function getRecentCalls(agentId, limit = 20) {
  * List all agents (admin view).
  */
 async function listAgents() {
-  return prisma.agent.findMany({
+  const agents = await prisma.agent.findMany({
     include: {
       extension: {
         select: {
@@ -99,6 +99,17 @@ async function listAgents() {
       },
     },
     orderBy: { name: 'asc' },
+  });
+
+  return agents.map((a) => {
+    let effectiveStatus = a.status;
+    if (effectiveStatus === 'OFFLINE' && a.extension?.registered) {
+      effectiveStatus = 'ONLINE';
+    }
+    return {
+      ...a,
+      status: effectiveStatus,
+    };
   });
 }
 

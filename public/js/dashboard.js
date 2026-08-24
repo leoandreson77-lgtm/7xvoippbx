@@ -6,6 +6,22 @@
 (async function () {
   'use strict';
 
+  window.agentLogout = function () {
+    try {
+      const token = localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
+      fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'include',
+        headers: token ? { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` } : { 'Content-Type': 'application/json' },
+      });
+    } catch { /* ignore */ }
+    try {
+      localStorage.clear();
+      sessionStorage.clear();
+    } catch { /* ignore */ }
+    window.location.replace('/');
+  };
+
   // ── Auth Check & Session Restoration ────────────
   let authToken = localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
   let agentData = JSON.parse(localStorage.getItem('agent') || sessionStorage.getItem('agent') || 'null');
@@ -258,8 +274,7 @@
   });
 
   // ── Logout ──────────────────────────────────────
-  logoutBtn.addEventListener('click', async () => {
-    // If in active call, confirm
+  window.agentLogout = async function () {
     if (sipClient.isInCall()) {
       if (!confirm('You have an active call. Logging out will end the call. Continue?')) {
         return;
@@ -293,7 +308,9 @@
 
     // 5. Redirect
     window.location.href = '/';
-  });
+  };
+
+  logoutBtn.addEventListener('click', window.agentLogout);
 
   // ── Status Helpers ──────────────────────────────
   function setStatus(status, text) {
@@ -465,6 +482,7 @@
 
     // 3. Load recent calls
     loadRecentCalls();
+
   })();
 
   // ── Handle page unload ──────────────────────────

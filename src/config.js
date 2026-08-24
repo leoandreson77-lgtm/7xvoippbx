@@ -1,23 +1,19 @@
 require('dotenv').config();
 
 // Determine FreeSWITCH / ESL Connection settings from environment
-const freeswitchHost = process.env.FREESWITCH_HOST || process.env.ESL_HOST || '';
+const freeswitchHost = process.env.FREESWITCH_HOST || process.env.ESL_HOST || 'freeswitch';
 const freeswitchPort = parseInt(process.env.FREESWITCH_PORT || process.env.ESL_PORT, 10) || 8021;
 const freeswitchPassword = process.env.FREESWITCH_PASSWORD || process.env.ESL_PASSWORD || 'ClueCon';
 
 /**
- * Validate required runtime environment variables.
- * Fails fast with clear error if FREESWITCH_HOST is missing in non-test runtime.
+ * Validate runtime environment configuration.
+ * Logs target settings on startup.
  */
 function validateConfig() {
   const isTest = (process.env.NODE_ENV || 'development') === 'test';
 
-  if (!isTest && !freeswitchHost) {
-    throw new Error(
-      '❌ [CONFIG ERROR] Missing required environment variable: FREESWITCH_HOST\n' +
-      'Please set FREESWITCH_HOST in your EasyPanel / Docker environment variables (e.g. FREESWITCH_HOST=freeswitch_freeswitch).\n' +
-      'Hardcoded fallback to 127.0.0.1 has been removed for container compatibility.'
-    );
+  if (!isTest && !process.env.FREESWITCH_HOST && !process.env.ESL_HOST) {
+    console.log('ℹ️ [CONFIG] FREESWITCH_HOST variable not set; defaulting ESL target to "freeswitch:8021"');
   }
 }
 
@@ -42,8 +38,8 @@ const config = {
   },
 
   sip: {
-    domain: process.env.SIP_DOMAIN || 'kradglobal.com',
-    wssUrl: process.env.SIP_WSS_URL || 'wss://kradglobal.com:7443',
+    domain: process.env.SIP_DOMAIN || '7xvoip.com',
+    wssUrl: process.env.SIP_WSS_URL || 'wss://7xvoip.com:7443',
     stunServer: process.env.STUN_SERVER || 'stun:stun.l.google.com:19302',
   },
 

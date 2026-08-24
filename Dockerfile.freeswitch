@@ -1,0 +1,27 @@
+FROM safarov/freeswitch:1.10.12
+
+# Ensure ssl cert directory exists to avoid curl 77 errors
+RUN mkdir -p /etc/ssl/certs /opt/custom-freeswitch-conf && touch /etc/ssl/certs/ca-certificates.crt
+
+# Pre-disable mod_signalwire in vanilla configs
+RUN sed -i '/mod_signalwire/d' /usr/share/freeswitch/conf/vanilla/autoload_configs/modules.conf.xml 2>/dev/null || true
+RUN sed -i '/mod_signalwire/d' /etc/freeswitch/autoload_configs/modules.conf.xml 2>/dev/null || true
+
+# Copy project's customized FreeSWITCH configs to permanent backup location
+COPY freeswitch/dialplan/default.xml /opt/custom-freeswitch-conf/default.xml
+COPY freeswitch/dialplan/public.xml /opt/custom-freeswitch-conf/public.xml
+COPY freeswitch/sip_profiles/internal.xml /opt/custom-freeswitch-conf/internal.xml
+COPY freeswitch/docker/autoload_configs/xml_curl.conf.xml /opt/custom-freeswitch-conf/xml_curl.conf.xml
+
+# Also copy into vanilla template directories
+COPY freeswitch/dialplan/default.xml /usr/share/freeswitch/conf/vanilla/dialplan/default.xml
+COPY freeswitch/dialplan/public.xml /usr/share/freeswitch/conf/vanilla/dialplan/public.xml
+COPY freeswitch/sip_profiles/internal.xml /usr/share/freeswitch/conf/vanilla/sip_profiles/internal.xml
+COPY freeswitch/docker/autoload_configs/xml_curl.conf.xml /usr/share/freeswitch/conf/vanilla/autoload_configs/xml_curl.conf.xml
+
+# Install custom startup script that guarantees ACL and ESL configs survive any restart/redeploy
+COPY freeswitch/start-freeswitch.sh /usr/local/bin/start-freeswitch.sh
+RUN chmod +x /usr/local/bin/start-freeswitch.sh
+
+ENTRYPOINT ["/usr/local/bin/start-freeswitch.sh"]
+CMD ["freeswitch", "-nc", "-nf", "-nonat"]

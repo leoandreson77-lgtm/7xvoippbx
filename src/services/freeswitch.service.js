@@ -205,12 +205,78 @@ async function reloadXml() {
 }
 
 /**
- * Originate an outbound call from an extension with specific Caller ID / TFN.
+ * Normalize a phone number for PSTN dialing.
+ * Ensures + prefix for international format.
  */
-async function originateCall(extension, destination, realm, callerIdNumber) {
+function normalizeDestination(destination) {
+  let normalizedDest = destination.replace(/\s/g, '');
+  if (/^\d{10}$/.test(normalizedDest)) {
+    normalizedDest = `+1${normalizedDest}`; // US numbers
+  } else if (/^\d{11,15}$/.test(normalizedDest) && !normalizedDest.startsWith('+')) {
+    normalizedDest = `+${normalizedDest}`;
+  }
+  return normalizedDest;
+}
+
+/**
+ * Originate an outbound call from an extension with specific Caller ID / TFN.
+ * Routes through FreeSWITCH gateway (sip-trunk) → PSTN termination.
+ * @param {string} extension - Caller extension number
+ * @param {string} destination - PSTN number to call
+ * @param {string} realm - SIP domain
+ * @param {string} callerIdNumber - Outbound Caller ID
+ * @param {string} [gatewayName='sip-trunk'] - FreeSWITCH gateway name to route through
+ */
+async function originateCall(extension, destination, realm, callerIdNumber, gatewayName = 'sip-trunk') {
   const callerId = callerIdNumber || config.trunk.did || extension;
-  const trunkHost = config.trunk.host || 'sip.provider.com';
-  const cmd = `originate {origination_caller_id_number=${callerId},origination_caller_id_name=KRAD}sofia/internal/${destination}@${trunkHost} &bridge(user/${extension}@${realm})`;
+  const normalizedDest = normalizeDestination(destination);
+
+  // Route via FreeSWITCH named gateway
+  const cmd = `originate {origination_caller_id_number=${callerId},origination_caller_id_name=7XVOIP}sofia/gateway/${gatewayName}/${normalizedDest} &bridge(user/${extension}@${realm})`;
+  log.info(`Originating outbound call: ${extension} → ${normalizedDest} via gateway "${gatewayName}" (CallerID: ${callerId})`);
+  return api(cmd);
+}
+
+/**
+ * Originate an outbound call via a dynamic SIP trunk from the database.
+ * Uses sofia/external with SIP authentication variables instead of a named gateway.
+ * This enables calls through trunks configured in the Admin Panel without
+ * requiring FreeSWITCH gateway XML reconfiguration.
+ *
+ * @param {string} extension - Caller extension number
+ * @param {string} destination - PSTN number to call
+ * @param {string} realm - SIP domain for the caller
+ * @param {string} callerIdNumber - Outbound Caller ID
+ * @param {object} trunkConfig - Dynamic trunk configuration from DB
+ * @param {string} trunkConfig.host - SIP proxy host (e.g., 7xvoip.pstn.twilio.com)
+ * @param {number} [trunkConfig.port=5060] - SIP port
+ * @param {string} [trunkConfig.username] - SIP auth username
+ * @param {string} [trunkConfig.password] - SIP auth password
+ * @param {string} [trunkConfig.name] - Trunk display name (for logging)
+ */
+async function originateCallViaTrunk(extension, destination, realm, callerIdNumber, trunkConfig) {
+  const callerId = callerIdNumber || config.trunk.did || extension;
+  const normalizedDest = normalizeDestination(destination);
+
+  const trunkHost = trunkConfig.host;
+  const trunkPort = trunkConfig.port || 5060;
+  const trunkUser = trunkConfig.username || '';
+  const trunkPass = trunkConfig.password || '';
+  const trunkName = trunkConfig.name || trunkHost;
+
+  // Build channel variables for SIP authentication
+  const chanVars = [
+    `origination_caller_id_number=${callerId}`,
+    `origination_caller_id_name=7XVOIP`,
+    `sip_auth_username=${trunkUser}`,
+    `sip_auth_password=${trunkPass}`,
+  ].join(',');
+
+  // Route via sofia/external to the dynamic trunk host
+  const sipUri = `sofia/external/${normalizedDest}@${trunkHost}:${trunkPort}`;
+  const cmd = `originate {${chanVars}}${sipUri} &bridge(user/${extension}@${realm})`;
+
+  log.info(`Originating outbound call via dynamic trunk "${trunkName}": ${extension} → ${normalizedDest}@${trunkHost}:${trunkPort} (CallerID: ${callerId})`);
   return api(cmd);
 }
 
@@ -285,6 +351,7 @@ module.exports = {
   rescanGateway,
   reloadXml,
   originateCall,
+  originateCallViaTrunk,
   hangupCall,
   holdCall,
   resumeCall,

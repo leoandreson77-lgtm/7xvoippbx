@@ -66,7 +66,7 @@ router.post('/', express.urlencoded({ extended: false }), async (req, res) => {
                 <variable name="user_context" value="default"/>
                 <variable name="effective_caller_id_name" value="${extension.sipUsername}"/>
                 <variable name="effective_caller_id_number" value="${extension.sipUsername}"/>
-                <variable name="outbound_caller_id_name" value="KRAD Global"/>
+                <variable name="outbound_caller_id_name" value="7XVOIP"/>
                 <variable name="outbound_caller_id_number" value="${config.trunk.did || extension.number}"/>
               </variables>
             </user>

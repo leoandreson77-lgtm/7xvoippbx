@@ -91,26 +91,45 @@ function handleCustomEvent(subclass, event) {
 
 /**
  * Handle new channel creation (call starting).
+ * For inbound calls from Twilio SIP trunk, notifies the target agent extension.
  */
 async function handleChannelCreate(event) {
   const uuid = event.getHeader?.('Unique-ID') || '';
   const direction = event.getHeader?.('Call-Direction') || '';
   const callerNumber = event.getHeader?.('Caller-Caller-ID-Number') || '';
+  const callerName = event.getHeader?.('Caller-Caller-ID-Name') || callerNumber;
   const calleeNumber = event.getHeader?.('Caller-Destination-Number') || '';
   const callerUsername = event.getHeader?.('variable_user_name') || '';
 
-  log.info(`Channel created: ${uuid} ${direction} ${callerNumber} → ${calleeNumber}`);
+  log.info(`Channel created: ${uuid} ${direction} ${callerNumber} (${callerName}) → ${calleeNumber}`);
 
   if (direction === 'inbound' && calleeNumber) {
-    // Check if the callee is one of our extensions
-    const ext = await prisma.extension.findUnique({ where: { number: calleeNumber } });
+    // Look up the callee extension to find their TFN label
+    const ext = await prisma.extension.findUnique({
+      where: { number: calleeNumber },
+      include: { tfn: { include: { trunk: { select: { name: true } } } } },
+    });
+
     if (ext) {
+      const tfnLabel = ext.tfn?.label || null;
+      const tfnNumber = ext.tfn?.number || null;
+      const trunkName = ext.tfn?.trunk?.name || 'SIP Trunk';
+
+      // Notify the target agent of the incoming call with full context
       broadcastToExtension(calleeNumber, WS_EVENTS.INCOMING_CALL, {
+        from: callerNumber,
+        callerName: callerName || callerNumber,
+        callUuid: uuid,
         uuid,
-        callerNumber,
         calleeNumber,
+        tfnNumber,
+        tfnLabel,
+        trunkName,
+        isTfn: !!tfnNumber,
       });
+
       updateAgentStatusForExtension(calleeNumber, AGENT_STATUS.RINGING);
+      log.info(`📞 Inbound call from ${callerNumber} → ext ${calleeNumber} (TFN: ${tfnNumber || 'N/A'}, UUID: ${uuid})`);
     }
   }
 

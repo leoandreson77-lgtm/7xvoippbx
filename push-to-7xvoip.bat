@@ -26,7 +26,7 @@ if %ERRORLEVEL% NEQ 0 (
 
 echo.
 echo [*] Step 2: Building image from Dockerfile...
-docker build -t %REPO%:%TAG% -t %REPO%:v1.0.0 .
+docker build -t %REPO%:%TAG% .
 if %ERRORLEVEL% NEQ 0 (
     echo.
     echo [ERROR] Docker build failed.
@@ -39,7 +39,6 @@ echo [*] Step 3: Pushing image to %REPO%:%TAG%...
 docker push %REPO%:%TAG%
 
 if %ERRORLEVEL% EQU 0 (
-    docker push %REPO%:v1.0.0
     echo.
     echo =============================================================================
     echo [SUCCESS] Successfully pushed to Docker Hub!
