@@ -1,4 +1,4 @@
-name: 🚀 Build & Deploy 7XVOIP PBX System
+name: 🚀 Build & Direct VPS Auto-Deploy
 
 on:
   push:
@@ -7,7 +7,8 @@ on:
       - master
 
 jobs:
-  build-and-deploy:
+  build-and-push:
+    name: 📦 Build & Push Docker Images
     runs-on: ubuntu-latest
     steps:
       - name: 📥 Checkout Repository
@@ -40,10 +41,38 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/7xvoip-freeswitch:latest
 
-      # 3. Trigger EasyPanel Webhook to Auto-Deploy on VPS (Optional)
-      - name: 🚀 Trigger EasyPanel Auto-Deploy Webhook
-        if: env.EASYPANEL_WEBHOOK_URL != ''
-        env:
-          EASYPANEL_WEBHOOK_URL: ${{ secrets.EASYPANEL_WEBHOOK_URL }}
-        run: |
-          curl -X POST "$EASYPANEL_WEBHOOK_URL"
+  deploy-to-vps:
+    name: 🚀 SSH Deploy to VPS
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: env.VPS_HOST != ''
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+    steps:
+      - name: ⚡ Deploy on VPS Server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME || 'root' }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: 22
+          script: |
+            echo "🚀 Pulling latest images from Docker Hub..."
+            docker pull ${{ secrets.DOCKERHUB_USERNAME }}/7xvoip:latest
+            docker pull ${{ secrets.DOCKERHUB_USERNAME }}/7xvoip-freeswitch:latest
+
+            echo "🔄 Updating FreeSWITCH Live container..."
+            docker rm -f freeswitch_live 2>/dev/null || true
+            docker run -d \
+              --name freeswitch_live \
+              --restart unless-stopped \
+              --net=host \
+              -e ESL_ALLOWED_IP=172.16.1.7 \
+              -e FREESWITCH_PASSWORD=ClueCon \
+              ${{ secrets.DOCKERHUB_USERNAME }}/7xvoip-freeswitch:latest
+
+            echo "🔄 Restarting Node.js App container..."
+            docker restart $(docker ps | grep -i 7xvoipbx | awk '{print $1}') 2>/dev/null || true
+
+            echo "✅ Deployment completed successfully!"
