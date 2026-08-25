@@ -30,13 +30,13 @@ if [ -d "/opt/custom-freeswitch-conf" ]; then
 fi
 
 # 5. Configure Dynamic ACL for ESL Node.js access (esl_node)
-ALLOWED_IP="${ESL_ALLOWED_IP:-172.16.1.7}"
+ALLOWED_IP="${ESL_ALLOWED_IP:-172.16.0.0/12}"
 case "$ALLOWED_IP" in
   */*) CIDR_IP="$ALLOWED_IP" ;;
   *)   CIDR_IP="${ALLOWED_IP}/32" ;;
 esac
 
-echo "[*] Configuring ACL 'esl_node' for IP: ${CIDR_IP} and 127.0.0.1/32..."
+echo "[*] Configuring ACL 'esl_node' for CIDR: ${CIDR_IP}, 172.16.0.0/12, 10.0.0.0/8, and 127.0.0.1/32..."
 
 for ACL_FILE in /etc/freeswitch/autoload_configs/acl.conf.xml /usr/share/freeswitch/conf/vanilla/autoload_configs/acl.conf.xml; do
   if [ -f "$ACL_FILE" ]; then
@@ -49,6 +49,8 @@ for ACL_FILE in /etc/freeswitch/autoload_configs/acl.conf.xml /usr/share/freeswi
       print $0
       print "    <list name=\"esl_node\" default=\"deny\">"
       print "      <node type=\"allow\" cidr=\"" cidr "\"/>"
+      print "      <node type=\"allow\" cidr=\"172.16.0.0/12\"/>"
+      print "      <node type=\"allow\" cidr=\"10.0.0.0/8\"/>"
       print "      <node type=\"allow\" cidr=\"127.0.0.1/32\"/>"
       print "    </list>"
       next
