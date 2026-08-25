@@ -37,19 +37,16 @@ function connect(onEvent) {
         log.info(`✓ Connected to FreeSWITCH ESL at ${config.freeswitch.host}:${config.freeswitch.port}`);
 
         // Subscribe to events
-        conn.subscribe([
-          'CHANNEL_CREATE',
-          'CHANNEL_ANSWER',
-          'CHANNEL_HANGUP',
-          'CHANNEL_HANGUP_COMPLETE',
-          'CHANNEL_BRIDGE',
-          'CHANNEL_HOLD',
-          'CHANNEL_UNHOLD',
-          'DTMF',
-          'CUSTOM sofia::register',
-          'CUSTOM sofia::unregister',
-          'CUSTOM sofia::register_failure',
-        ]);
+        // Subscribe to all FreeSWITCH events
+        conn.events('json', 'all');
+        conn.filter('Event-Name', 'CHANNEL_CREATE');
+        conn.filter('Event-Name', 'CHANNEL_ANSWER');
+        conn.filter('Event-Name', 'CHANNEL_HANGUP');
+        conn.filter('Event-Name', 'CHANNEL_HANGUP_COMPLETE');
+        conn.filter('Event-Name', 'CHANNEL_BRIDGE');
+        conn.filter('Event-Name', 'CHANNEL_HOLD');
+        conn.filter('Event-Name', 'CHANNEL_UNHOLD');
+        conn.filter('Event-Name', 'CUSTOM');
 
         conn.on('esl::event::*', (event) => {
           if (onEvent) {

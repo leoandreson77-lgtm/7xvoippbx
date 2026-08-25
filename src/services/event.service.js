@@ -96,9 +96,12 @@ function handleCustomEvent(subclass, event) {
 async function handleChannelCreate(event) {
   const uuid = event.getHeader?.('Unique-ID') || '';
   const direction = event.getHeader?.('Call-Direction') || '';
-  const callerNumber = event.getHeader?.('Caller-Caller-ID-Number') || '';
+  const callerNumber = event.getHeader?.('Caller-Caller-ID-Number') || event.getHeader?.('variable_sip_from_user') || '';
   const callerName = event.getHeader?.('Caller-Caller-ID-Name') || callerNumber;
-  const calleeNumber = event.getHeader?.('Caller-Destination-Number') || '';
+  const calleeNumber = event.getHeader?.('Caller-Destination-Number') || 
+                       event.getHeader?.('variable_sip_to_user') || 
+                       event.getHeader?.('variable_destination_number') || 
+                       event.getHeader?.('Hunt-Destination-Number') || '';
   const callerUsername = event.getHeader?.('variable_user_name') || '';
 
   log.info(`Channel created: ${uuid} ${direction} ${callerNumber} (${callerName}) → ${calleeNumber}`);
