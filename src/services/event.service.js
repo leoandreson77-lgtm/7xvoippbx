@@ -104,32 +104,68 @@ async function handleChannelCreate(event) {
   log.info(`Channel created: ${uuid} ${direction} ${callerNumber} (${callerName}) → ${calleeNumber}`);
 
   if (direction === 'inbound' && calleeNumber) {
-    // Look up the callee extension to find their TFN label
-    const ext = await prisma.extension.findUnique({
+    // Check if calleeNumber is a direct extension OR a TFN / DID number
+    let targetExtensionNumber = calleeNumber;
+    let tfnRecord = null;
+
+    // 1. Check direct Extension
+    let ext = await prisma.extension.findUnique({
       where: { number: calleeNumber },
       include: { tfn: { include: { trunk: { select: { name: true } } } } },
     });
 
-    if (ext) {
-      const tfnLabel = ext.tfn?.label || null;
-      const tfnNumber = ext.tfn?.number || null;
-      const trunkName = ext.tfn?.trunk?.name || 'SIP Trunk';
+    // 2. If not found, check if it's a TFN Number (e.g. +18885752806)
+    if (!ext) {
+      const cleanDid = calleeNumber.replace(/^\+/, '');
+      tfnRecord = await prisma.tfnNumber.findFirst({
+        where: {
+          OR: [
+            { number: calleeNumber },
+            { number: `+${cleanDid}` },
+            { number: cleanDid },
+          ],
+        },
+        include: { extension: true, trunk: true },
+      });
 
-      // Notify the target agent of the incoming call with full context
-      broadcastToExtension(calleeNumber, WS_EVENTS.INCOMING_CALL, {
-        from: callerNumber,
-        callerName: callerName || callerNumber,
+      if (tfnRecord && tfnRecord.extension) {
+        targetExtensionNumber = tfnRecord.extension.number;
+        ext = tfnRecord.extension;
+      }
+    }
+
+    if (ext || tfnRecord) {
+      const tfnLabel = tfnRecord?.label || ext?.tfn?.label || 'US Toll-Free Support';
+      const tfnNumber = tfnRecord?.number || ext?.tfn?.number || calleeNumber;
+      const trunkName = tfnRecord?.trunk?.name || ext?.tfn?.trunk?.name || 'Twilio SIP Trunk';
+
+      const payload = {
+        from: callerNumber || 'Unknown Caller',
+        callerName: callerName || callerNumber || 'Incoming Call',
         callUuid: uuid,
         uuid,
-        calleeNumber,
+        calleeNumber: targetExtensionNumber,
         tfnNumber,
         tfnLabel,
         trunkName,
         isTfn: !!tfnNumber,
-      });
+      };
 
-      updateAgentStatusForExtension(calleeNumber, AGENT_STATUS.RINGING);
-      log.info(`📞 Inbound call from ${callerNumber} → ext ${calleeNumber} (TFN: ${tfnNumber || 'N/A'}, UUID: ${uuid})`);
+      if (targetExtensionNumber && targetExtensionNumber !== calleeNumber) {
+        // Broadcast to specifically mapped extension (e.g., 1002)
+        broadcastToExtension(targetExtensionNumber, WS_EVENTS.INCOMING_CALL, payload);
+        updateAgentStatusForExtension(targetExtensionNumber, AGENT_STATUS.RINGING);
+      } else {
+        // Broadcast to all online agents
+        if (websocketService) {
+          websocketService.broadcast({
+            type: WS_EVENTS.INCOMING_CALL,
+            data: payload,
+          });
+        }
+      }
+
+      log.info(`📞 Inbound call from ${callerNumber} → TFN ${tfnNumber} → Ext ${targetExtensionNumber || 'ALL'} (UUID: ${uuid})`);
     }
   }
 
