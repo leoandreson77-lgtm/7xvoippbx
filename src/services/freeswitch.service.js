@@ -227,11 +227,11 @@ function normalizeDestination(destination) {
  * @param {string} callerIdNumber - Outbound Caller ID
  * @param {string} [gatewayName='sip-trunk'] - FreeSWITCH gateway name to route through
  */
-async function originateCall(extension, destination, realm, callerIdNumber, gatewayName = 'sip-trunk') {
-  const callerId = callerIdNumber || config.trunk.did || extension;
+async function originateCall(extension, destination, realm, callerIdNumber, gatewayName = 'twilio') {
+  const callerId = callerIdNumber || config.trunk.did || '+17627446471';
   const normalizedDest = normalizeDestination(destination);
 
-  // Route via FreeSWITCH named gateway
+  // Route via FreeSWITCH named gateway (e.g. twilio)
   const cmd = `originate {origination_caller_id_number=${callerId},origination_caller_id_name=7XVOIP}sofia/gateway/${gatewayName}/${normalizedDest} &bridge(user/${extension}@${realm})`;
   log.info(`Originating outbound call: ${extension} → ${normalizedDest} via gateway "${gatewayName}" (CallerID: ${callerId})`);
   return api(cmd);
