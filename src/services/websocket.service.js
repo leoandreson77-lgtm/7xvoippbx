@@ -3,6 +3,7 @@ const { PrismaClient } = require('@prisma/client');
 const { createLogger } = require('../utils/logger');
 const authService = require('./auth.service');
 const freeswitchService = require('./freeswitch.service');
+const twilioService = require('./twilio.service');
 const config = require('../config');
 const { AGENT_STATUS } = require('../constants');
 
@@ -309,31 +310,46 @@ async function handleMessage(ws, rawData) {
 
           log.info(`📞 Routing Outbound PSTN Call [${cleanTo}] via ${trunkDisplayName}`);
 
-          // Originate via FreeSWITCH if connected
+          let twilioSuccess = false;
+          // Primary: Twilio Voice REST API Direct Calling
           try {
-            if (freeswitchService.isConnected()) {
-              if (assignedTrunk) {
-                // Dynamic trunk routing — use trunk config from database
-                await freeswitchService.originateCallViaTrunk(
-                  ws.extensionNumber,
-                  cleanTo,
-                  config.sip.domain,
-                  callerId,
-                  {
-                    host: assignedTrunk.host,
-                    port: assignedTrunk.port,
-                    username: assignedTrunk.username,
-                    password: assignedTrunk.password,
-                    name: assignedTrunk.name,
-                  }
-                );
-              } else {
-                // Default gateway routing (sip-trunk from internal.xml)
-                await freeswitchService.originateCall(ws.extensionNumber, cleanTo, config.sip.domain, callerId);
-              }
+            if (config.twilio.accountSid && config.twilio.apiKey && config.twilio.apiSecret) {
+              await twilioService.makeCall({
+                to: cleanTo,
+                from: callerId,
+                extension: ws.extensionNumber,
+              });
+              twilioSuccess = true;
             }
-          } catch (e) {
-            log.warn(`FreeSWITCH ESL call originate failed: ${e.message}. Signalling call progress...`);
+          } catch (twErr) {
+            log.warn(`Twilio REST call failed (${twErr.message}). Attempting FreeSWITCH ESL fallback...`);
+          }
+
+          // Fallback: Originate via FreeSWITCH if Twilio REST did not trigger
+          if (!twilioSuccess) {
+            try {
+              if (freeswitchService.isConnected()) {
+                if (assignedTrunk) {
+                  await freeswitchService.originateCallViaTrunk(
+                    ws.extensionNumber,
+                    cleanTo,
+                    config.sip.domain,
+                    callerId,
+                    {
+                      host: assignedTrunk.host,
+                      port: assignedTrunk.port,
+                      username: assignedTrunk.username,
+                      password: assignedTrunk.password,
+                      name: assignedTrunk.name,
+                    }
+                  );
+                } else {
+                  await freeswitchService.originateCall(ws.extensionNumber, cleanTo, config.sip.domain, callerId);
+                }
+              }
+            } catch (e) {
+              log.warn(`FreeSWITCH ESL call originate failed: ${e.message}. Signalling call progress...`);
+            }
           }
 
           sendToAgent(ws.agentId, {

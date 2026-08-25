@@ -55,6 +55,13 @@ const config = {
     loginMax: parseInt(process.env.LOGIN_RATE_LIMIT_MAX, 10) || 10,
   },
 
+  twilio: {
+    accountSid: process.env.TWILIO_ACCOUNT_SID || '',
+    apiKey: process.env.TWILIO_API_KEY || '',
+    apiSecret: process.env.TWILIO_API_SECRET || '',
+    defaultFrom: process.env.TWILIO_DEFAULT_FROM || '+17627446471',
+  },
+
   validateConfig,
 };
 
