@@ -7,3 +7,4 @@ prisma/migrations/
 dist/
 .DS_Store
 Thumbs.db
+scratch/

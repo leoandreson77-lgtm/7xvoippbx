@@ -65,8 +65,8 @@ COPY --chown=node:node prisma ./prisma
 COPY --chown=node:node src ./src
 COPY --chown=node:node docker-entrypoint.sh ./docker-entrypoint.sh
 
-# Ensure entrypoint script is executable
-RUN chmod +x ./docker-entrypoint.sh
+# Ensure entrypoint script has unix line endings and is executable
+RUN sed -i 's/\r$//' ./docker-entrypoint.sh && chmod +x ./docker-entrypoint.sh
 
 # Run as non-root user
 USER node
@@ -79,7 +79,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
   CMD curl -f http://localhost:3000/api/health || exit 1
 
 # Entrypoint initializes database before starting the main process
-ENTRYPOINT ["./docker-entrypoint.sh"]
+ENTRYPOINT ["/bin/sh", "./docker-entrypoint.sh"]
 
 # Default start command (direct node execution for graceful SIGTERM signal handling)
 CMD ["node", "src/server.js"]

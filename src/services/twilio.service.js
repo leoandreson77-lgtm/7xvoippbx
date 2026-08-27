@@ -16,9 +16,8 @@ const log = {
  * @param {string} [options.vpsIp] - FreeSWITCH PBX Public IP
  */
 async function makeCall({ to, from, extension, vpsIp = '31.97.41.165' }) {
-  const accountSid = config.twilio.accountSid;
-  const apiKey = config.twilio.apiKey;
-  const apiSecret = config.twilio.apiSecret;
+  const accountSid = config.twilio.accountSid || process.env.TWILIO_ACCOUNT_SID;
+  const authToken = config.twilio.authToken || process.env.TWILIO_AUTH_TOKEN;
   const callerId = from || config.twilio.defaultFrom || '+17627446471';
 
   // Clean and format destination
@@ -28,10 +27,11 @@ async function makeCall({ to, from, extension, vpsIp = '31.97.41.165' }) {
     else cleanTo = `+${cleanTo}`;
   }
 
-  log.info(`Initiating Twilio Voice Call: ${callerId} → ${cleanTo} (Bridging to Ext: ${extension})`);
+  log.info(`Initiating Twilio Voice Call: ${callerId} → ${cleanTo} (Bridging to Agent Ext: ${extension})`);
 
-  // TwiML to bridge Twilio call to FreeSWITCH extension via SIP on port 5080
-  const twiml = `<Response><Dial callerId="${callerId}"><Sip>sip:${extension}@${vpsIp}:5080</Sip></Dial></Response>`;
+  // Bridge customer directly to logged-in WebRTC client or FreeSWITCH SIP extension
+  const agentClient = `agent_${extension || '1003'}`;
+  const twiml = `<Response><Dial answerOnBridge="true" callerId="${callerId}"><Client>${agentClient}</Client><Sip>sip:${extension || '1003'}@${vpsIp}:5060</Sip></Dial></Response>`;
 
   const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Calls.json`;
   const params = new URLSearchParams();
@@ -39,7 +39,7 @@ async function makeCall({ to, from, extension, vpsIp = '31.97.41.165' }) {
   params.append('From', callerId);
   params.append('Twiml', twiml);
 
-  const authHeader = 'Basic ' + Buffer.from(`${apiKey}:${apiSecret}`).toString('base64');
+  const authHeader = 'Basic ' + Buffer.from(`${accountSid}:${authToken}`).toString('base64');
 
   const response = await fetch(url, {
     method: 'POST',
@@ -60,6 +60,29 @@ async function makeCall({ to, from, extension, vpsIp = '31.97.41.165' }) {
   return data;
 }
 
+/**
+ * Get live call status from Twilio by Call SID
+ */
+async function getCallStatus(callSid) {
+  const accountSid = config.twilio.accountSid || process.env.TWILIO_ACCOUNT_SID;
+  const authToken = config.twilio.authToken || process.env.TWILIO_AUTH_TOKEN;
+
+  const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Calls/${callSid}.json`;
+  const authHeader = 'Basic ' + Buffer.from(`${accountSid}:${authToken}`).toString('base64');
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: { 'Authorization': authHeader },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch call status: ${response.statusText}`);
+  }
+  return response.json();
+}
+
 module.exports = {
   makeCall,
+  getCallStatus,
 };
+

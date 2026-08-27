@@ -19,6 +19,7 @@ const websocketService = require('./services/websocket.service');
 const authRoutes = require('./routes/auth.routes');
 const agentRoutes = require('./routes/agent.routes');
 const adminRoutes = require('./routes/admin.routes');
+const voiceRoutes = require('./routes/voice.routes');
 const freeswitchRoutes = require('./routes/freeswitch.routes');
 
 const log = createLogger('server');
@@ -29,24 +30,9 @@ app.set('trust proxy', 1);
 
 // ── Security ──────────────────────────────────────
 app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      baseUri: ["'self'"],
-      fontSrc: ["'self'", "https://fonts.gstatic.com"],
-      formAction: ["'self'"],
-      frameAncestors: ["'self'"],
-      imgSrc: ["'self'", "data:", "blob:"],
-      objectSrc: ["'none'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net"],
-      scriptSrcAttr: ["'none'"],
-      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-      connectSrc: ["'self'", "wss:", "ws:", "https:", "http:"],
-      mediaSrc: ["'self'", "blob:", "mediastream:"],
-      upgradeInsecureRequests: null
-    }
-  },
-  hsts: false
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+  hsts: false,
 }));
 
 app.use(cors({
@@ -80,6 +66,7 @@ app.get(['/health', '/api/health'], (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/agent', agentRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/voice', voiceRoutes);
 
 // ── FreeSWITCH mod_xml_curl endpoint ──────────────
 // This is NOT an API route — it's called by FreeSWITCH directly.

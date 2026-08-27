@@ -5,7 +5,7 @@ import {
   Mic, MicOff, Pause, Play, ArrowRightLeft, Users,
   Delete, Headphones, Speaker, Volume2, Wifi, WifiOff,
   Signal, SignalLow, SignalMedium, SignalHigh,
-  ChevronDown, Settings, Timer, Shield,
+  ChevronDown, Settings, Timer, Shield, AlertCircle,
 } from 'lucide-react';
 
 const KEYPAD_KEYS = [
@@ -48,20 +48,38 @@ export default function Softphone() {
     return `${m}:${s}`;
   };
 
-  // Enumerate audio devices
-  useEffect(() => {
-    async function getDevices() {
-      try {
-        await navigator.mediaDevices.getUserMedia({ audio: true });
+  const [micPermissionGranted, setMicPermissionGranted] = useState(false);
+
+  const requestAudioPermission = async () => {
+    try {
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach((track) => track.stop());
+        setMicPermissionGranted(true);
+      }
+      if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
         const devices = await navigator.mediaDevices.enumerateDevices();
-        const inputs = devices.filter(d => d.kind === 'audioinput');
-        const outputs = devices.filter(d => d.kind === 'audiooutput');
+        const inputs = devices.filter((d) => d.kind === 'audioinput');
+        const outputs = devices.filter((d) => d.kind === 'audiooutput');
         setAudioDevices({ inputs, outputs });
         if (inputs.length > 0 && !selectedMic) setSelectedMic(inputs[0].deviceId);
         if (outputs.length > 0 && !selectedSpeaker) setSelectedSpeaker(outputs[0].deviceId);
-      } catch (e) { /* permission denied */ }
+      }
+    } catch (err) {
+      console.warn('Audio permission or device enumeration error:', err);
     }
-    getDevices();
+  };
+
+  // Enumerate audio devices
+  useEffect(() => {
+    requestAudioPermission();
+
+    if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+      navigator.mediaDevices.addEventListener('devicechange', requestAudioPermission);
+      return () => {
+        navigator.mediaDevices.removeEventListener('devicechange', requestAudioPermission);
+      };
+    }
   }, []);
 
   // Simulated network quality indicator
@@ -111,15 +129,17 @@ export default function Softphone() {
 
   const handleBackspace = () => setDialInput(prev => prev.slice(0, -1));
 
-  const handleDial = (e) => {
-    e && e.preventDefault();
+  const handleCall = (e) => {
+    if (e && e.preventDefault) e.preventDefault();
     if (!dialInput.trim()) return;
+    console.log('Initiating outbound call to:', dialInput.trim());
     makeCall(dialInput.trim());
   };
 
+  const handleDial = handleCall;
+
   const handleTransfer = () => {
     if (!transferTarget.trim()) return;
-    // Transfer logic would go here via SIP context
     setShowTransfer(false);
     setTransferTarget('');
   };
@@ -201,6 +221,8 @@ export default function Softphone() {
           )}
         </div>
       </div>
+
+
 
       {/* ── Active Call View ── */}
       {isInCall && (
@@ -342,7 +364,7 @@ export default function Softphone() {
               type="button"
               className="sp-dial-btn"
               onClick={handleDial}
-              disabled={!dialInput.trim() && sipStatus !== 'ONLINE'}
+              disabled={!dialInput.trim()}
             >
               <Phone size={20} />
               <span>Call</span>
@@ -355,7 +377,10 @@ export default function Softphone() {
       <div className="sp-device-section">
         <button
           className="sp-device-toggle"
-          onClick={() => setShowDevices(!showDevices)}
+          onClick={() => {
+            setShowDevices(!showDevices);
+            if (!showDevices) requestAudioPermission();
+          }}
         >
           <Settings size={14} />
           <span>Audio Devices</span>
@@ -364,6 +389,30 @@ export default function Softphone() {
 
         {showDevices && (
           <div className="sp-device-panel">
+            {!micPermissionGranted && audioDevices.inputs.length === 0 && (
+              <button
+                type="button"
+                onClick={requestAudioPermission}
+                style={{
+                  padding: '8px 12px',
+                  background: 'rgba(99, 102, 241, 0.15)',
+                  border: '1px solid rgba(99, 102, 241, 0.3)',
+                  borderRadius: '8px',
+                  color: 'var(--accent-light)',
+                  fontSize: '11px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  marginBottom: '4px',
+                }}
+              >
+                <Mic size={14} /> Allow / Refresh Audio Access
+              </button>
+            )}
+
             <div className="sp-device-group">
               <label className="sp-device-label">
                 <Mic size={12} />
@@ -374,13 +423,18 @@ export default function Softphone() {
                 onChange={(e) => setSelectedMic(e.target.value)}
                 className="sp-device-select"
               >
-                {audioDevices.inputs.map(d => (
-                  <option key={d.deviceId} value={d.deviceId}>
-                    {d.label || `Microphone ${d.deviceId.slice(0, 6)}`}
-                  </option>
-                ))}
+                {audioDevices.inputs.length > 0 ? (
+                  audioDevices.inputs.map((d, index) => (
+                    <option key={d.deviceId || index} value={d.deviceId}>
+                      {d.label || `Microphone ${index + 1}`}
+                    </option>
+                  ))
+                ) : (
+                  <option value="default">Default System Microphone</option>
+                )}
               </select>
             </div>
+
             <div className="sp-device-group">
               <label className="sp-device-label">
                 <Volume2 size={12} />
@@ -391,11 +445,15 @@ export default function Softphone() {
                 onChange={(e) => setSelectedSpeaker(e.target.value)}
                 className="sp-device-select"
               >
-                {audioDevices.outputs.map(d => (
-                  <option key={d.deviceId} value={d.deviceId}>
-                    {d.label || `Speaker ${d.deviceId.slice(0, 6)}`}
-                  </option>
-                ))}
+                {audioDevices.outputs.length > 0 ? (
+                  audioDevices.outputs.map((d, index) => (
+                    <option key={d.deviceId || index} value={d.deviceId}>
+                      {d.label || `Speaker ${index + 1}`}
+                    </option>
+                  ))
+                ) : (
+                  <option value="default">Default System Speaker</option>
+                )}
               </select>
             </div>
           </div>

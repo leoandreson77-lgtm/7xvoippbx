@@ -310,51 +310,55 @@ async function handleMessage(ws, rawData) {
 
           log.info(`📞 Routing Outbound PSTN Call [${cleanTo}] via ${trunkDisplayName}`);
 
-          let twilioSuccess = false;
-          // Primary: Twilio Voice REST API Direct Calling
-          try {
-            if (config.twilio.accountSid && config.twilio.apiKey && config.twilio.apiSecret) {
-              await twilioService.makeCall({
+          log.info(`📞 Agent ${ws.extensionNumber} initiating call to [${cleanTo}] via ${trunkDisplayName}`);
+
+          // Only invoke server-side REST call if NOT directly initiated via browser WebRTC
+          if (!data.isWebRtc) {
+            try {
+              const callResult = await twilioService.makeCall({
                 to: cleanTo,
                 from: callerId,
                 extension: ws.extensionNumber,
               });
-              twilioSuccess = true;
-            }
-          } catch (twErr) {
-            log.warn(`Twilio REST call failed (${twErr.message}). Attempting FreeSWITCH ESL fallback...`);
-          }
 
-          // Fallback: Originate via FreeSWITCH if Twilio REST did not trigger
-          if (!twilioSuccess) {
-            try {
-              if (freeswitchService.isConnected()) {
-                if (assignedTrunk) {
-                  await freeswitchService.originateCallViaTrunk(
-                    ws.extensionNumber,
-                    cleanTo,
-                    config.sip.domain,
-                    callerId,
-                    {
-                      host: assignedTrunk.host,
-                      port: assignedTrunk.port,
-                      username: assignedTrunk.username,
-                      password: assignedTrunk.password,
-                      name: assignedTrunk.name,
+              if (callResult?.sid) {
+                const callSid = callResult.sid;
+                const pollInterval = setInterval(async () => {
+                  try {
+                    const statusRes = await twilioService.getCallStatus(callSid);
+                    if (statusRes.status === 'in-progress') {
+                      clearInterval(pollInterval);
+                      sendToAgent(ws.agentId, {
+                        type: 'call_accepted',
+                        data: { callUuid: callSid, from: ws.extensionNumber },
+                      });
+                    } else if (['completed', 'busy', 'no-answer', 'failed', 'canceled'].includes(statusRes.status)) {
+                      clearInterval(pollInterval);
+                      sendToAgent(ws.agentId, {
+                        type: statusRes.status === 'completed' ? 'call_ended' : 'call_failed',
+                        data: { cause: statusRes.status, callUuid: callSid },
+                      });
                     }
-                  );
-                } else {
-                  await freeswitchService.originateCall(ws.extensionNumber, cleanTo, config.sip.domain, callerId);
-                }
+                  } catch (e) {
+                    clearInterval(pollInterval);
+                  }
+                }, 1500);
+
+                setTimeout(() => clearInterval(pollInterval), 60000);
               }
-            } catch (e) {
-              log.warn(`FreeSWITCH ESL call originate failed: ${e.message}. Signalling call progress...`);
+            } catch (twErr) {
+              log.warn(`Twilio call initiate error: ${twErr.message}`);
+              sendToAgent(ws.agentId, {
+                type: 'call_failed',
+                data: { cause: `Call failed: ${twErr.message}` },
+              });
+              return;
             }
           }
 
           sendToAgent(ws.agentId, {
             type: 'call_progress',
-            data: { to: cleanTo, status: `Routing via ${trunkDisplayName} (${callerId})` },
+            data: { to: cleanTo, status: `Dialing via ${trunkDisplayName} (${callerId})` },
           });
         }
         break;
