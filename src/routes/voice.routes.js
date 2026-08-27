@@ -93,9 +93,10 @@ router.all('/twiml', express.urlencoded({ extended: true }), (req, res) => {
       });
       dial.number(cleanTo);
     }
-  } else {
+  }
+  if (!isAgentInitiated || !cleanTo) {
     // ── INBOUND CUSTOMER CALL ──
-    // Ring active agent softphones in browser
+    console.log(`[TwiML] 📞 INBOUND Customer Call received: From=${from} -> To=${to}. Ringing agents 1001-1004...`);
     const dial = response.dial({ answerOnBridge: true, timeout: 45 });
     dial.client('agent_1001');
     dial.client('agent_1002');
