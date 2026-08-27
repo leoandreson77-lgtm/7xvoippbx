@@ -21,8 +21,7 @@ router.get('/token', authenticate, (req, res) => {
       ? req.agent?.extension?.number 
       : (req.agent?.extension || req.agent?.id || '1003');
 
-    const session = req.query.session || req.body.session || Date.now();
-    const identity = `agent_${extNumber}_${session}`;
+    const identity = `agent_${extNumber}`;
 
     const voiceGrant = new VoiceGrant({
       outgoingApplicationSid: appSid,
