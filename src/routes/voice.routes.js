@@ -51,57 +51,51 @@ router.all('/twiml', express.urlencoded({ extended: true }), (req, res) => {
   const VoiceResponse = twilio.twiml.VoiceResponse;
   const response = new VoiceResponse();
 
-  const to = req.body.To || req.query.To;
+  const to = req.body.To || req.query.To || '';
+  const from = req.body.From || req.query.From || '';
   let rawCallerId = req.body.CallerId || req.query.CallerId || config.twilio.defaultFrom || '+17627446471';
+  
   let callerId = String(rawCallerId).replace(/[\s\-()]/g, '');
   if (!callerId.startsWith('+')) {
     callerId = `+${callerId}`;
   }
 
-  let isOutboundDial = false;
+  const isAgentInitiated = String(from).startsWith('client:') || String(from).startsWith('agent_');
+  let cleanTo = String(to).replace(/[\s\-()]/g, '');
 
-  if (to) {
-    let cleanTo = String(to).replace(/[\s\-()]/g, '');
-
-    // Check if destination is an internal WebRTC agent client or 4-digit extension
+  if (isAgentInitiated && cleanTo) {
+    // ── AGENT OUTBOUND CALL ──
     if (cleanTo.startsWith('client:') || cleanTo.startsWith('agent_') || /^\d{4}$/.test(cleanTo)) {
+      // 1. Internal Extension Call (e.g. 1001 -> 1002)
       let clientName = cleanTo.replace(/^client:/, '');
       if (/^\d{4}$/.test(clientName)) {
         clientName = `agent_${clientName}`;
       }
       const dial = response.dial({ answerOnBridge: true });
       dial.client(clientName);
-      isOutboundDial = true;
     } else {
-      // Check if destination is NOT a system DID (system DIDs are incoming numbers)
-      const systemDids = ['+17627446471', '+18885752806', '+18005550199', '+911145678900'];
-      
-      if (!systemDids.includes(cleanTo) && req.body.Direction !== 'inbound') {
-        // Outbound PSTN Dialing to external customer
-        if (!cleanTo.startsWith('+')) {
-          if (cleanTo.length === 10) cleanTo = `+1${cleanTo}`;
-          else cleanTo = `+${cleanTo}`;
-        }
-
-        // For international calls (e.g. India +91), ensure non-toll-free DID callerId
-        if (cleanTo.startsWith('+91') && (callerId.startsWith('+1888') || callerId.startsWith('+1800'))) {
-          callerId = config.twilio.defaultFrom || '+17627446471';
-        }
-
-        const dial = response.dial({
-          callerId,
-          answerOnBridge: true,
-          timeout: 45,
-          timeLimit: 14400,
-        });
-        dial.number(cleanTo);
-        isOutboundDial = true;
+      // 2. Outbound PSTN Call to external customer
+      if (!cleanTo.startsWith('+')) {
+        if (cleanTo.length === 10) cleanTo = `+1${cleanTo}`;
+        else cleanTo = `+${cleanTo}`;
       }
-    }
-  }
 
-  if (!isOutboundDial) {
-    // Inbound call from customer -> Ring active agent clients in browser
+      // For international calls (e.g. India +91), ensure valid DID callerId
+      if (cleanTo.startsWith('+91') && (callerId.startsWith('+1888') || callerId.startsWith('+1800'))) {
+        callerId = config.twilio.defaultFrom || '+17627446471';
+      }
+
+      const dial = response.dial({
+        callerId,
+        answerOnBridge: true,
+        timeout: 45,
+        timeLimit: 14400,
+      });
+      dial.number(cleanTo);
+    }
+  } else {
+    // ── INBOUND CUSTOMER CALL ──
+    // Ring active agent softphones in browser
     const dial = response.dial({ answerOnBridge: true, timeout: 45 });
     dial.client('agent_1001');
     dial.client('agent_1002');
