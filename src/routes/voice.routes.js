@@ -58,6 +58,8 @@ router.all('/twiml', express.urlencoded({ extended: true }), (req, res) => {
     callerId = `+${callerId}`;
   }
 
+  let isOutboundDial = false;
+
   if (to) {
     let cleanTo = String(to).replace(/[\s\-()]/g, '');
 
@@ -69,30 +71,37 @@ router.all('/twiml', express.urlencoded({ extended: true }), (req, res) => {
       }
       const dial = response.dial({ answerOnBridge: true });
       dial.client(clientName);
+      isOutboundDial = true;
     } else {
-      // Outbound PSTN Dialing
-      if (!cleanTo.startsWith('+')) {
-        if (cleanTo.length === 10) cleanTo = `+1${cleanTo}`;
-        else cleanTo = `+${cleanTo}`;
-      }
+      // Check if destination is NOT a system DID (system DIDs are incoming numbers)
+      const systemDids = ['+17627446471', '+18885752806', '+18005550199', '+911145678900'];
+      
+      if (!systemDids.includes(cleanTo) && req.body.Direction !== 'inbound') {
+        // Outbound PSTN Dialing to external customer
+        if (!cleanTo.startsWith('+')) {
+          if (cleanTo.length === 10) cleanTo = `+1${cleanTo}`;
+          else cleanTo = `+${cleanTo}`;
+        }
 
-      // For international calls (e.g. India +91), ensure non-toll-free DID callerId
-      if (cleanTo.startsWith('+91') && (callerId.startsWith('+1888') || callerId.startsWith('+1800'))) {
-        callerId = config.twilio.defaultFrom || '+17627446471';
-      }
+        // For international calls (e.g. India +91), ensure non-toll-free DID callerId
+        if (cleanTo.startsWith('+91') && (callerId.startsWith('+1888') || callerId.startsWith('+1800'))) {
+          callerId = config.twilio.defaultFrom || '+17627446471';
+        }
 
-      // Direct PSTN bridge with answerOnBridge=true
-      // This ensures ringing tone until remote party picks up, then instant 2-way audio
-      const dial = response.dial({
-        callerId,
-        answerOnBridge: true,
-        timeout: 45,
-        timeLimit: 14400,
-      });
-      dial.number(cleanTo);
+        const dial = response.dial({
+          callerId,
+          answerOnBridge: true,
+          timeout: 45,
+          timeLimit: 14400,
+        });
+        dial.number(cleanTo);
+        isOutboundDial = true;
+      }
     }
-  } else {
-    // Inbound call without direct parameter -> Ring active agent clients
+  }
+
+  if (!isOutboundDial) {
+    // Inbound call from customer -> Ring active agent clients in browser
     const dial = response.dial({ answerOnBridge: true, timeout: 45 });
     dial.client('agent_1001');
     dial.client('agent_1002');
